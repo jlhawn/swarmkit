@@ -69,6 +69,7 @@ message ServiceSpec {
 	oneof mode {
 		ReplicatedService replicated = 3;
 		GlobalService global = 4;
+		StaticService static = 10;
 	}
 
 	// Update contains settings which affect updates.
@@ -97,6 +98,26 @@ message ReplicatedService {
 // GlobalService represents global service.
 message GlobalService {
 	// Empty message for now.
+}
+
+// StaticService sets the reconcilation target to always have a single task
+// running on a predetermined node with a static network identity.
+message StaticService {
+	// PeerGroup declares the name of the peer group which this service is a
+	// member of.
+	string PeerGroup = 1;
+	// PeerNetwork specifies network that this server will use to connect to
+	// its peers. This value must be a network ID and that network must be in
+	// the network attachements list in the service task spec.
+	string PeerNetwork = 2;
+	// Placement specifies node selection constraints. These are used to first
+	// decide which node the task for this static service should be scheduled
+	// on. The Task spec should not have a Placement section as this value will
+	// override it. Tasks will always be assigned to the node which the static
+	// service is initially assigned to and will never change, even if the
+	// selected node no longer meets the placement constraints in the future
+	// (hence the term "static").
+	Placement placement = 5;
 }
 
 message TaskSpec {

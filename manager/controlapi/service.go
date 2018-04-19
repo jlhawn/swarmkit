@@ -14,6 +14,7 @@ import (
 	"github.com/docker/swarmkit/identity"
 	"github.com/docker/swarmkit/manager/allocator"
 	"github.com/docker/swarmkit/manager/constraint"
+	"github.com/docker/swarmkit/manager/orchestrator"
 	"github.com/docker/swarmkit/manager/state/store"
 	"github.com/docker/swarmkit/protobuf/ptypes"
 	"github.com/docker/swarmkit/template"
@@ -444,18 +445,44 @@ func (s *Server) validateNetworks(networks []*api.NetworkAttachmentConfig) error
 }
 
 func validateMode(s *api.ServiceSpec) error {
-	m := s.GetMode()
-	switch m.(type) {
+	switch m := s.GetMode().(type) {
 	case *api.ServiceSpec_Replicated:
-		if int64(m.(*api.ServiceSpec_Replicated).Replicated.Replicas) < 0 {
+		if int64(m.Replicated.Replicas) < 0 {
 			return status.Errorf(codes.InvalidArgument, "Number of replicas must be non-negative")
 		}
 	case *api.ServiceSpec_Global:
+	case *api.ServiceSpec_Static:
+		if m.Static.PeerGroup == "" {
+			return status.Errorf(codes.InvalidArgument, "static mode: peer group must be provided")
+		}
+		if m.Static.PeerNetwork == "" {
+			return status.Error(codes.InvalidArgument, "static mode: peer network must be provided")
+		}
+		// Validate static node placement.
+		if err := validatePlacement(m.Static.Placement); err != nil {
+			return status.Errorf(codes.InvalidArgument, "static mode: placement: %s", err)
+		}
+		if s.Task.Placement != nil {
+			return status.Error(codes.InvalidArgument, "static mode: task spec placement config must be nil")
+		}
+
+		// Validate that the peer network is an ID in the task spec network
+		// attachments config.
+		return validatePeerNetwork(s.Task.Networks, m.Static.PeerNetwork)
 	default:
 		return status.Errorf(codes.InvalidArgument, "Unrecognized service mode")
 	}
 
 	return nil
+}
+
+func validatePeerNetwork(networks []*api.NetworkAttachmentConfig, peerNetworkID string) error {
+	for _, network := range networks {
+		if network.Target == peerNetworkID {
+			return nil
+		}
+	}
+	return status.Error(codes.InvalidArgument, "static mode: peer network must be included in task spec network attachment configs")
 }
 
 func validateServiceSpec(spec *api.ServiceSpec) error {
@@ -577,8 +604,8 @@ func (s *Server) checkPortConflicts(spec *api.ServiceSpec, serviceID string) err
 }
 
 // checkSecretExistence finds if the secret exists
-func (s *Server) checkSecretExistence(tx store.Tx, spec *api.ServiceSpec) error {
-	container := spec.Task.GetContainer()
+func (s *Server) checkSecretExistence(tx store.Tx, spec api.TaskSpec) error {
+	container := spec.GetContainer()
 	if container == nil {
 		return nil
 	}
@@ -606,8 +633,8 @@ func (s *Server) checkSecretExistence(tx store.Tx, spec *api.ServiceSpec) error 
 }
 
 // checkConfigExistence finds if the config exists
-func (s *Server) checkConfigExistence(tx store.Tx, spec *api.ServiceSpec) error {
-	container := spec.Task.GetContainer()
+func (s *Server) checkConfigExistence(tx store.Tx, spec api.TaskSpec) error {
+	container := spec.GetContainer()
 	if container == nil {
 		return nil
 	}
@@ -666,14 +693,20 @@ func (s *Server) CreateService(ctx context.Context, request *api.CreateServiceRe
 		}
 	}
 
+	if orchestrator.IsStaticService(service) {
+		service.StaticInfo = &api.StaticInfo{
+			Message: "Initializing",
+		}
+	}
+
 	err := s.store.Update(func(tx store.Tx) error {
 		// Check to see if all the secrets being added exist as objects
 		// in our datastore
-		err := s.checkSecretExistence(tx, request.Spec)
+		err := s.checkSecretExistence(tx, request.Spec.Task)
 		if err != nil {
 			return err
 		}
-		err = s.checkConfigExistence(tx, request.Spec)
+		err = s.checkConfigExistence(tx, request.Spec.Task)
 		if err != nil {
 			return err
 		}
@@ -745,6 +778,11 @@ func (s *Server) UpdateService(ctx context.Context, request *api.UpdateServiceRe
 		}
 	}
 
+	// Static services cannot have their static mode options changed.
+	if !reflect.DeepEqual(service.Spec.GetStatic(), request.Spec.GetStatic()) {
+		return nil, status.Errorf(codes.Unimplemented, errModeChangeNotAllowed.Error())
+	}
+
 	err := s.store.Update(func(tx store.Tx) error {
 		service = store.GetService(tx, request.ServiceID)
 		if service == nil {
@@ -763,12 +801,12 @@ func (s *Server) UpdateService(ctx context.Context, request *api.UpdateServiceRe
 
 		// Check to see if all the secrets being added exist as objects
 		// in our datastore
-		err := s.checkSecretExistence(tx, request.Spec)
+		err := s.checkSecretExistence(tx, request.Spec.Task)
 		if err != nil {
 			return err
 		}
 
-		err = s.checkConfigExistence(tx, request.Spec)
+		err = s.checkConfigExistence(tx, request.Spec.Task)
 		if err != nil {
 			return err
 		}

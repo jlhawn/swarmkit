@@ -31,6 +31,7 @@ import (
 	"github.com/docker/swarmkit/manager/orchestrator/constraintenforcer"
 	"github.com/docker/swarmkit/manager/orchestrator/global"
 	"github.com/docker/swarmkit/manager/orchestrator/replicated"
+	"github.com/docker/swarmkit/manager/orchestrator/static"
 	"github.com/docker/swarmkit/manager/orchestrator/taskreaper"
 	"github.com/docker/swarmkit/manager/resourceapi"
 	"github.com/docker/swarmkit/manager/scheduler"
@@ -136,6 +137,7 @@ type Manager struct {
 	watchServer            *watchapi.Server
 	replicatedOrchestrator *replicated.Orchestrator
 	globalOrchestrator     *global.Orchestrator
+	staticOrchestrator     *static.Orchestrator
 	taskReaper             *taskreaper.TaskReaper
 	constraintEnforcer     *constraintenforcer.ConstraintEnforcer
 	scheduler              *scheduler.Scheduler
@@ -670,6 +672,9 @@ func (m *Manager) Stop(ctx context.Context, clearData bool) {
 	if m.globalOrchestrator != nil {
 		m.globalOrchestrator.Stop()
 	}
+	if m.staticOrchestrator != nil {
+		m.staticOrchestrator.Stop()
+	}
 	if m.taskReaper != nil {
 		m.taskReaper.Stop()
 	}
@@ -965,6 +970,7 @@ func (m *Manager) becomeLeader(ctx context.Context) {
 	m.replicatedOrchestrator = replicated.NewReplicatedOrchestrator(s)
 	m.constraintEnforcer = constraintenforcer.New(s)
 	m.globalOrchestrator = global.NewGlobalOrchestrator(s)
+	m.staticOrchestrator = static.NewStaticOrchestrator(s)
 	m.taskReaper = taskreaper.New(s)
 	m.scheduler = scheduler.New(s)
 	m.keyManager = keymanager.New(s, keymanager.DefaultConfig())
@@ -1044,6 +1050,12 @@ func (m *Manager) becomeLeader(ctx context.Context) {
 		}
 	}(m.globalOrchestrator)
 
+	go func(staticOrchestrator *static.Orchestrator) {
+		if err := staticOrchestrator.Run(ctx); err != nil {
+			log.G(ctx).WithError(err).Error("static orchestrator exited with an error")
+		}
+	}(m.staticOrchestrator)
+
 	go func(roleManager *roleManager) {
 		roleManager.Run(ctx)
 	}(m.roleManager)
@@ -1072,6 +1084,9 @@ func (m *Manager) becomeFollower() {
 
 	m.globalOrchestrator.Stop()
 	m.globalOrchestrator = nil
+
+	m.staticOrchestrator.Stop()
+	m.staticOrchestrator = nil
 
 	m.taskReaper.Stop()
 	m.taskReaper = nil

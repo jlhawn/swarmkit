@@ -6,7 +6,7 @@ import (
 
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/cmd/swarmctl/common"
-	"github.com/docker/swarmkit/cmd/swarmctl/service/flagparser"
+	"github.com/docker/swarmkit/cmd/swarmctl/common/flagparser"
 	"github.com/spf13/cobra"
 )
 
@@ -41,12 +41,26 @@ var (
 				},
 			}
 
-			if err := flagparser.Merge(cmd, spec, c); err != nil {
+			if err := flagparser.MergeService(cmd, spec, c); err != nil {
 				return err
 			}
 
-			if err := flagparser.ParseAddSecret(cmd, spec, "secret"); err != nil {
+			if err := flagparser.ParseAddSecret(cmd, &spec.Task, "secret"); err != nil {
 				return err
+			}
+			if err := flagparser.ParseAddConfig(cmd, &spec.Task, "config"); err != nil {
+				return err
+			}
+
+			// Additional checks for static mode.
+			if spec.GetStatic() != nil {
+				flags := cmd.Flags()
+				if !flags.Changed("peer-group") || !flags.Changed("peer-network") {
+					return fmt.Errorf("--peer-group and --peer-network are required with --mode=static")
+				}
+				// Transfer the placement config to the mode.
+				spec.GetStatic().Placement = spec.Task.Placement
+				spec.Task.Placement = nil
 			}
 
 			r, err := c.CreateService(common.Context(cmd), &api.CreateServiceRequest{Spec: spec})
@@ -62,6 +76,11 @@ var (
 func init() {
 	flags := createCmd.Flags()
 	flagparser.AddServiceFlags(flags)
-	flags.String("mode", "replicated", "one of replicated, global")
+	flagparser.AddAnnotationsFlags(flags)
+	flagparser.AddTaskFlags(flags)
+	flags.String("mode", "replicated", "one of replicated, global,static")
+	flags.String("peer-group", "", "name of peer group if static mode")
+	flags.String("peer-network", "", "name of peer network if static mode")
 	flags.StringSlice("secret", nil, "add a secret from swarm")
+	flags.StringSlice("config", nil, "add a config from swarm")
 }

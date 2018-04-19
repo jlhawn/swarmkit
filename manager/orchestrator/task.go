@@ -42,7 +42,7 @@ func NewTask(cluster *api.Cluster, service *api.Service, slot uint64, nodeID str
 		LogDriver:    logDriver,
 	}
 
-	// In global mode we also set the NodeID
+	// In global and static mode we also set the NodeID
 	if nodeID != "" {
 		task.NodeID = nodeID
 	}

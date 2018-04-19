@@ -11,14 +11,14 @@ import (
 // parseBind only supports a very simple version of bind for testing the most
 // basic of data flows. Replace with a --mount flag, similar to what we have in
 // docker service.
-func parseBind(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
+func parseBind(flags *pflag.FlagSet, spec *api.TaskSpec) error {
 	if flags.Changed("bind") {
 		binds, err := flags.GetStringSlice("bind")
 		if err != nil {
 			return err
 		}
 
-		container := spec.Task.GetContainer()
+		container := spec.GetContainer()
 
 		for _, bind := range binds {
 			parts := strings.SplitN(bind, ":", 2)

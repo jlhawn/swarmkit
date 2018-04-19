@@ -32,6 +32,10 @@ func printServiceSummary(service *api.Service, running int) {
 		}
 	}
 	common.FprintfIfNotEmpty(w, "Replicas\t: %s\n", getServiceReplicasTxt(service, running))
+	common.FprintfIfNotEmpty(w, "Static Message\t: %s\n", getServiceStaticMessageTxt(service))
+	common.FprintfIfNotEmpty(w, "Static Group\t: %s\n", getServiceStaticGroupTxt(service))
+	common.FprintfIfNotEmpty(w, "Static Address\t: %s\n", getServiceStaticAddressTxt(service))
+	common.FprintfIfNotEmpty(w, "Static Node\t: %s\n", getServiceStaticNodeTxt(service))
 
 	if service.UpdateStatus != nil {
 		fmt.Fprintln(w, "Update Status\t")

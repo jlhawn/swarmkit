@@ -37,6 +37,7 @@ const (
 	indexConfig       = "config"
 	indexKind         = "kind"
 	indexCustom       = "custom"
+	indexPeerGroup    = "peergroup"
 
 	prefix = "_prefix"
 

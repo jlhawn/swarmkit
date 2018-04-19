@@ -7,7 +7,7 @@ import (
 
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/cmd/swarmctl/common"
-	"github.com/docker/swarmkit/cmd/swarmctl/service/flagparser"
+	"github.com/docker/swarmkit/cmd/swarmctl/common/flagparser"
 	"github.com/spf13/cobra"
 )
 
@@ -36,21 +36,21 @@ var (
 
 			spec := service.Spec.Copy()
 
-			if err := flagparser.Merge(cmd, spec, c); err != nil {
+			if err := flagparser.MergeService(cmd, spec, c); err != nil {
 				return err
 			}
 
-			if err := flagparser.ParseAddSecret(cmd, spec, "add-secret"); err != nil {
+			if err := flagparser.ParseAddSecret(cmd, &spec.Task, "add-secret"); err != nil {
 				return err
 			}
-			if err := flagparser.ParseRemoveSecret(cmd, spec, "rm-secret"); err != nil {
+			if err := flagparser.ParseRemoveSecret(cmd, &spec.Task, "rm-secret"); err != nil {
 				return err
 			}
 
-			if err := flagparser.ParseAddConfig(cmd, spec, "add-config"); err != nil {
+			if err := flagparser.ParseAddConfig(cmd, &spec.Task, "add-config"); err != nil {
 				return err
 			}
-			if err := flagparser.ParseRemoveConfig(cmd, spec, "rm-config"); err != nil {
+			if err := flagparser.ParseRemoveConfig(cmd, &spec.Task, "rm-config"); err != nil {
 				return err
 			}
 
@@ -79,4 +79,6 @@ func init() {
 	updateCmd.Flags().StringSlice("rm-config", nil, "remove a config from the service")
 	updateCmd.Flags().Bool("force", false, "force tasks to restart even if nothing has changed")
 	flagparser.AddServiceFlags(updateCmd.Flags())
+	flagparser.AddAnnotationsFlags(updateCmd.Flags())
+	flagparser.AddTaskFlags(updateCmd.Flags())
 }

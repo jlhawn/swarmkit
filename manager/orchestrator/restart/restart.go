@@ -140,7 +140,7 @@ func (r *Supervisor) Restart(ctx context.Context, tx store.Tx, cluster *api.Clus
 
 	if orchestrator.IsReplicatedService(service) {
 		restartTask = orchestrator.NewTask(cluster, service, t.Slot, "")
-	} else if orchestrator.IsGlobalService(service) {
+	} else if orchestrator.IsGlobalService(service) || orchestrator.IsStaticService(service) {
 		restartTask = orchestrator.NewTask(cluster, service, 0, t.NodeID)
 	} else {
 		log.G(ctx).Error("service not supported by restart supervisor")

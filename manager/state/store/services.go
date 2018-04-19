@@ -50,6 +50,11 @@ func init() {
 					Indexer:      api.ServiceCustomIndexer{},
 					AllowMissing: true,
 				},
+				indexPeerGroup: {
+					Name:         indexPeerGroup,
+					Indexer:      serviceIndexerByPeerGroup{},
+					AllowMissing: true,
+				},
 			},
 		},
 		Save: func(tx ReadTx, snapshot *api.StoreSnapshot) error {
@@ -235,4 +240,24 @@ func (si serviceIndexerByConfig) FromObject(obj interface{}) (bool, [][]byte, er
 	}
 
 	return len(configIDs) != 0, configIDs, nil
+}
+
+type serviceIndexerByPeerGroup struct{}
+
+func (si serviceIndexerByPeerGroup) FromArgs(args ...interface{}) ([]byte, error) {
+	return fromArgs(args...)
+}
+
+func (si serviceIndexerByPeerGroup) FromObject(obj interface{}) (bool, []byte, error) {
+	s, ok := obj.(*api.Service)
+	if !ok {
+		panic("unexpected type passed to FromObject")
+	}
+
+	staticMode := s.Spec.GetStatic()
+	if staticMode == nil {
+		return false, nil, nil
+	}
+
+	return true, []byte(strings.ToLower(staticMode.PeerGroup) + "\x00"), nil
 }

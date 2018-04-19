@@ -131,7 +131,7 @@ func (c *containerAdapter) createNetworks(ctx context.Context) error {
 func (c *containerAdapter) removeNetworks(ctx context.Context) error {
 	for _, nid := range c.container.networks() {
 		if err := c.client.NetworkRemove(ctx, nid); err != nil {
-			if isActiveEndpointError(err) {
+			if isActiveEndpointError(err) || isNetworkInUseByTask(err) {
 				continue
 			}
 
@@ -323,4 +323,8 @@ func isUnknownContainer(err error) bool {
 
 func isStoppedContainer(err error) bool {
 	return strings.Contains(err.Error(), "is already stopped")
+}
+
+func isNetworkInUseByTask(err error) bool {
+	return strings.Contains(err.Error(), "is in use by task")
 }

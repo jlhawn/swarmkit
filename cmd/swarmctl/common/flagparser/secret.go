@@ -33,7 +33,7 @@ func parseSecretString(secretString string) (secretName, presentName string, err
 }
 
 // ParseAddSecret validates secrets passed on the command line
-func ParseAddSecret(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) error {
+func ParseAddSecret(cmd *cobra.Command, spec *api.TaskSpec, flagName string) error {
 	flags := cmd.Flags()
 
 	if flags.Changed(flagName) {
@@ -42,9 +42,9 @@ func ParseAddSecret(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) 
 			return err
 		}
 
-		container := spec.Task.GetContainer()
+		container := spec.GetContainer()
 		if container == nil {
-			spec.Task.Runtime = &api.TaskSpec_Container{
+			spec.Runtime = &api.TaskSpec_Container{
 				Container: &api.ContainerSpec{},
 			}
 		}
@@ -104,7 +104,7 @@ func ParseAddSecret(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) 
 }
 
 // ParseRemoveSecret removes a set of secrets from the task spec's secret references
-func ParseRemoveSecret(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) error {
+func ParseRemoveSecret(cmd *cobra.Command, spec *api.TaskSpec, flagName string) error {
 	flags := cmd.Flags()
 
 	if flags.Changed(flagName) {
@@ -113,7 +113,7 @@ func ParseRemoveSecret(cmd *cobra.Command, spec *api.ServiceSpec, flagName strin
 			return err
 		}
 
-		container := spec.Task.GetContainer()
+		container := spec.GetContainer()
 		if container == nil {
 			return nil
 		}

@@ -85,7 +85,7 @@ func (ns *nodeSet) tree(serviceID string, preferences []*api.PlacementPreference
 			// sure that the tree structure is not affected by
 			// which properties nodes have and don't have.
 
-			if node.ActiveTasksCountByService != nil {
+			if node.ActiveTasksCountByService != nil && serviceID != "" {
 				tree.tasks += node.ActiveTasksCountByService[serviceID]
 			}
 
@@ -100,7 +100,7 @@ func (ns *nodeSet) tree(serviceID string, preferences []*api.PlacementPreference
 			tree = next
 		}
 
-		if node.ActiveTasksCountByService != nil {
+		if node.ActiveTasksCountByService != nil && serviceID != "" {
 			tree.tasks += node.ActiveTasksCountByService[serviceID]
 		}
 

@@ -28,15 +28,19 @@ type subscription struct {
 	errors       []error
 	nodes        map[string]struct{}
 	pendingTasks map[string]struct{}
+	tasksOnly    bool
 }
 
 func newSubscription(store *store.MemoryStore, message *api.SubscriptionMessage, changed *watch.Queue) *subscription {
+	tasksOnly := len(message.Selector.ServiceIDs) == 0 && len(message.Selector.NodeIDs) == 0
+
 	return &subscription{
 		store:        store,
 		message:      message,
 		changed:      changed,
 		nodes:        make(map[string]struct{}),
 		pendingTasks: make(map[string]struct{}),
+		tasksOnly:    tasksOnly,
 	}
 }
 
@@ -66,9 +70,13 @@ func (s *subscription) Nodes() []string {
 func (s *subscription) Run(ctx context.Context) {
 	s.ctx, s.cancel = context.WithCancel(ctx)
 
+	if s.tasksOnly {
+		s.wg.Add(len(s.message.Selector.TaskIDs))
+	}
+
 	if s.follow() {
 		wq := s.store.WatchQueue()
-		ch, cancel := state.Watch(wq, api.EventCreateTask{}, api.EventUpdateTask{})
+		ch, cancel := state.Watch(wq, api.EventCreateTask{}, api.EventUpdateTask{}, api.EventDeleteTask{})
 		go func() {
 			defer cancel()
 			s.watch(ch)
@@ -86,7 +94,7 @@ func (s *subscription) Stop() {
 
 func (s *subscription) Wait(ctx context.Context) <-chan struct{} {
 	// Follow subscriptions never end
-	if s.follow() {
+	if s.follow() && !s.tasksOnly {
 		return nil
 	}
 
@@ -158,15 +166,22 @@ func (s *subscription) match() {
 			s.pendingTasks[t.ID] = struct{}{}
 			return
 		}
-		if _, ok := s.nodes[t.NodeID]; !ok {
+		if _, exists := s.nodes[t.NodeID]; !exists {
 			s.nodes[t.NodeID] = struct{}{}
-			s.wg.Add(1)
+			if !s.tasksOnly {
+				s.wg.Add(1)
+			}
 		}
 	}
 
 	s.store.View(func(tx store.ReadTx) {
-		for _, nid := range s.message.Selector.NodeIDs {
-			s.nodes[nid] = struct{}{}
+		for _, nodeID := range s.message.Selector.NodeIDs {
+			if _, exists := s.nodes[nodeID]; !exists {
+				s.nodes[nodeID] = struct{}{}
+				if !s.tasksOnly {
+					s.wg.Add(1)
+				}
+			}
 		}
 
 		for _, tid := range s.message.Selector.TaskIDs {
@@ -216,12 +231,16 @@ func (s *subscription) watch(ch <-chan events.Event) error {
 		delete(s.pendingTasks, t.ID)
 		if _, ok := s.nodes[t.NodeID]; !ok {
 			s.nodes[t.NodeID] = struct{}{}
+			if !s.tasksOnly {
+				s.wg.Add(1)
+			}
 			s.changed.Publish(s)
 		}
 	}
 
 	for {
 		var t *api.Task
+		isDelete := false
 		select {
 		case <-s.ctx.Done():
 			return s.ctx.Err()
@@ -231,11 +250,29 @@ func (s *subscription) watch(ch <-chan events.Event) error {
 				t = v.Task
 			case api.EventUpdateTask:
 				t = v.Task
+			case api.EventDeleteTask:
+				t = v.Task
+				isDelete = true
 			}
 		}
 
 		if t == nil {
 			panic("received invalid task from the watch queue")
+		}
+
+		if s.tasksOnly && (isDelete || t.Status.State > api.TaskStateRunning) {
+			if _, ok := matchTasks[t.ID]; ok {
+				delete(matchTasks, t.ID)
+				s.wg.Done()
+			}
+
+			if s.tasksOnly && len(matchTasks) == 0 {
+				return nil // Done watching those tasks.
+			}
+		}
+
+		if isDelete {
+			continue
 		}
 
 		if _, ok := matchTasks[t.ID]; ok {

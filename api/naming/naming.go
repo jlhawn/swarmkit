@@ -17,6 +17,10 @@ var (
 // and, in case Annotations.Name is missing, fallback
 // to construct the name from other information.
 func Task(t *api.Task) string {
+	if t.IsStandalone {
+		return fmt.Sprintf("stand-alone-task.%s.%s", t.Annotations.Name, t.ID)
+	}
+
 	if t.Annotations.Name != "" {
 		// if set, use the container Annotations.Name field, set in the orchestrator.
 		return t.Annotations.Name

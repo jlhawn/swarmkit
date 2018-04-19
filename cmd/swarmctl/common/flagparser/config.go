@@ -33,7 +33,7 @@ func parseConfigString(configString string) (configName, presentName string, err
 }
 
 // ParseAddConfig validates configs passed on the command line
-func ParseAddConfig(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) error {
+func ParseAddConfig(cmd *cobra.Command, spec *api.TaskSpec, flagName string) error {
 	flags := cmd.Flags()
 
 	if flags.Changed(flagName) {
@@ -42,9 +42,9 @@ func ParseAddConfig(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) 
 			return err
 		}
 
-		container := spec.Task.GetContainer()
+		container := spec.GetContainer()
 		if container == nil {
-			spec.Task.Runtime = &api.TaskSpec_Container{
+			spec.Runtime = &api.TaskSpec_Container{
 				Container: &api.ContainerSpec{},
 			}
 		}
@@ -104,7 +104,7 @@ func ParseAddConfig(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) 
 }
 
 // ParseRemoveConfig removes a set of configs from the task spec's config references
-func ParseRemoveConfig(cmd *cobra.Command, spec *api.ServiceSpec, flagName string) error {
+func ParseRemoveConfig(cmd *cobra.Command, spec *api.TaskSpec, flagName string) error {
 	flags := cmd.Flags()
 
 	if flags.Changed(flagName) {
@@ -113,7 +113,7 @@ func ParseRemoveConfig(cmd *cobra.Command, spec *api.ServiceSpec, flagName strin
 			return err
 		}
 
-		container := spec.Task.GetContainer()
+		container := spec.GetContainer()
 		if container == nil {
 			return nil
 		}

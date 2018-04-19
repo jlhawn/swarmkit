@@ -68,6 +68,7 @@ var (
 				},
 				DriverConfig: driver,
 				IPAM:         ipamOpts,
+				Attachable:   true,
 			}
 
 			c, err := common.Dial(cmd)

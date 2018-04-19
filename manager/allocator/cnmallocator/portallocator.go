@@ -208,6 +208,25 @@ func reconcilePortConfigs(s *api.Service) []*api.PortConfig {
 	return portConfigs
 }
 
+func (pa *portAllocator) serviceRestorePorts(s *api.Service) error {
+	if s.Endpoint == nil {
+		return nil // Nothing to restore.
+	}
+
+	for _, portConfig := range s.Endpoint.Ports {
+		// Make a copy of port config to create runtime state
+		portState := portConfig.Copy()
+		// Do an actual allocation only if the PublishMode is Ingress
+		if portConfig.PublishMode == api.PublishModeIngress {
+			if err := pa.portSpaces[portState.Protocol].allocate(portState); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (pa *portAllocator) serviceAllocatePorts(s *api.Service) (err error) {
 	if s.Spec.Endpoint == nil {
 		return nil

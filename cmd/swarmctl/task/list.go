@@ -50,12 +50,19 @@ var (
 					// Ignore flushing errors - there's nothing we can do.
 					_ = w.Flush()
 				}()
-				common.PrintHeader(w, "ID", "Service", "Desired State", "Last State", "Node")
+				common.PrintHeader(w, "ID", "Name", "Service", "Desired State", "Last State", "Node")
 				output = func(t *api.Task) {
-					fmt.Fprintf(w, "%s\t%s.%d\t%s\t%s %s\t%s\n",
+					serviceCol := "-"
+					standaloneName := "-"
+					if t.IsStandalone {
+						standaloneName = t.Annotations.Name
+					} else {
+						serviceCol = fmt.Sprintf("%s.%d", res.Resolve(api.Task{}, t.ServiceID), t.Slot)
+					}
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s %s\t%s\n",
 						t.ID,
-						res.Resolve(api.Service{}, t.ServiceID),
-						t.Slot,
+						standaloneName,
+						serviceCol,
 						t.DesiredState.String(),
 						t.Status.State.String(),
 						common.TimestampAgo(t.Status.Timestamp),

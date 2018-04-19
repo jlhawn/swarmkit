@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/docker/swarmkit/api"
@@ -35,10 +36,12 @@ type Scheduler struct {
 	pendingPreassignedTasks map[string]*api.Task
 	// preassignedTasks tracks tasks that were preassigned, including those
 	// past the pending state.
-	preassignedTasks map[string]struct{}
-	nodeSet          nodeSet
-	allTasks         map[string]*api.Task
-	pipeline         *Pipeline
+	preassignedTasks         map[string]struct{}
+	unassignedStaticServices map[string]*api.Service
+	nodeSet                  nodeSet
+	allTasks                 map[string]*api.Task
+	nodesByStaticPeerGroup   map[string]map[string]struct{}
+	pipeline                 *Pipeline
 
 	// stopChan signals to the state machine to stop running
 	stopChan chan struct{}
@@ -49,14 +52,16 @@ type Scheduler struct {
 // New creates a new scheduler.
 func New(store *store.MemoryStore) *Scheduler {
 	return &Scheduler{
-		store:                   store,
-		unassignedTasks:         make(map[string]*api.Task),
-		pendingPreassignedTasks: make(map[string]*api.Task),
-		preassignedTasks:        make(map[string]struct{}),
-		allTasks:                make(map[string]*api.Task),
-		stopChan:                make(chan struct{}),
-		doneChan:                make(chan struct{}),
-		pipeline:                NewPipeline(),
+		store:                    store,
+		unassignedTasks:          make(map[string]*api.Task),
+		pendingPreassignedTasks:  make(map[string]*api.Task),
+		preassignedTasks:         make(map[string]struct{}),
+		unassignedStaticServices: make(map[string]*api.Service),
+		allTasks:                 make(map[string]*api.Task),
+		nodesByStaticPeerGroup:   make(map[string]map[string]struct{}),
+		stopChan:                 make(chan struct{}),
+		doneChan:                 make(chan struct{}),
+		pipeline:                 NewPipeline(),
 	}
 }
 
@@ -98,7 +103,43 @@ func (s *Scheduler) setupTasksList(tx store.ReadTx) error {
 		tasksByNode[t.NodeID][t.ID] = t
 	}
 
+	services, err := store.FindServices(tx, store.All)
+	if err != nil {
+		return err
+	}
+
+	for _, service := range services {
+		s.handleServiceRestore(service)
+	}
+
 	return s.buildNodeSet(tx, tasksByNode)
+}
+
+func shouldIgnoreService(service *api.Service) bool {
+	// Ignore non-static services and static services with no network addresses
+	// allocated yet.
+	return service.StaticInfo == nil || service.StaticInfo.NetworkAttachment == nil
+}
+
+func (s *Scheduler) handleServiceRestore(service *api.Service) {
+	if shouldIgnoreService(service) {
+		return
+	}
+
+	nodeID := service.StaticInfo.NodeID
+	if nodeID == "" {
+		// Need to schedule this static service.
+		s.enqueueStaticService(service)
+		return
+	}
+
+	// This static service is already assigned to a node. Add it to its peer
+	// group for anti-affinity constraints.
+	peerGroup := service.Spec.GetStatic().PeerGroup
+	if s.nodesByStaticPeerGroup[peerGroup] == nil {
+		s.nodesByStaticPeerGroup[peerGroup] = make(map[string]struct{})
+	}
+	s.nodesByStaticPeerGroup[peerGroup][nodeID] = struct{}{}
 }
 
 // Run is the scheduler event loop.
@@ -150,6 +191,24 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		select {
 		case event := <-updates:
 			switch v := event.(type) {
+			case api.EventUpdateService:
+				if s.handleService(v.Service) {
+					tickRequired = true
+				}
+			case api.EventDeleteService:
+				// Remove from queue if it exists.
+				delete(s.unassignedStaticServices, v.Service.ID)
+
+				// Ignore if not a static service or if a node was never
+				// assigned.
+				if v.Service.StaticInfo != nil && v.Service.StaticInfo.NodeID != "" {
+					// Need to remove the node from the peer group.
+					peerGroup := v.Service.Spec.GetStatic().PeerGroup
+					nodeID := v.Service.StaticInfo.NodeID
+					if peerGroupNodes := s.nodesByStaticPeerGroup[peerGroup]; peerGroupNodes != nil {
+						delete(peerGroupNodes, nodeID)
+					}
+				}
 			case api.EventCreateTask:
 				if s.createTask(ctx, v.Task) {
 					tickRequired = true
@@ -206,6 +265,36 @@ func (s *Scheduler) Stop() {
 // enqueue queues a task for scheduling.
 func (s *Scheduler) enqueue(t *api.Task) {
 	s.unassignedTasks[t.ID] = t
+}
+
+func shouldIgnoreServiceOLD(s *api.Service) bool {
+
+	if s.StaticInfo.NodeID != "" {
+		return true // Already assigned a node.
+	}
+
+	return false
+}
+
+func (s *Scheduler) enqueueStaticService(service *api.Service) {
+	s.unassignedStaticServices[service.ID] = service
+}
+
+// handleService handles adding or updating a service, ignoring non-static
+// services or static services which have not yet been allocated a network
+// address. Returns true if the service needs to be scheduled.
+func (s *Scheduler) handleService(service *api.Service) bool {
+	if shouldIgnoreService(service) {
+		return false
+	}
+
+	if service.StaticInfo.NodeID != "" {
+		return false // This static service is already assigned a node.
+	}
+
+	// Need to schedule this static service.
+	s.enqueueStaticService(service)
+	return true
 }
 
 func (s *Scheduler) createTask(ctx context.Context, t *api.Task) bool {
@@ -374,6 +463,8 @@ func (s *Scheduler) processPreassignedTasks(ctx context.Context) {
 
 // tick attempts to schedule the queue.
 func (s *Scheduler) tick(ctx context.Context) {
+	s.scheduleStaticServices(ctx)
+
 	type commonSpecKey struct {
 		serviceID   string
 		specVersion api.Version
@@ -528,6 +619,111 @@ func (s *Scheduler) taskFitNode(ctx context.Context, t *api.Task, nodeID string)
 	return &newT
 }
 
+func (s *Scheduler) scheduleStaticServices(ctx context.Context) {
+	for serviceID, service := range s.unassignedStaticServices {
+		if service == nil || service.StaticInfo.NodeID != "" {
+			// Service deleted or already assigned
+			delete(s.unassignedStaticServices, serviceID)
+			continue
+		}
+
+		staticConfig := service.Spec.GetStatic()
+
+		placement := staticConfig.Placement
+		if placement == nil {
+			placement = &api.Placement{}
+		}
+		prefs := placement.Preferences
+
+		// Augment the placement constraints with anti-affinity constraints for
+		// the other nodes in the peer group.
+		peerGroupNodeIDs := s.nodesByStaticPeerGroup[staticConfig.PeerGroup]
+		for nodeID := range peerGroupNodeIDs {
+			placement.Constraints = append(placement.Constraints, fmt.Sprintf("node.id!=%s", nodeID))
+		}
+
+		// Prefer a node with fewer tasks assigned to it.
+		nodeLess := func(a *NodeInfo, b *NodeInfo) bool {
+			// Total number of tasks breaks ties.
+			return a.ActiveTasksCount < b.ActiveTasksCount
+		}
+
+		// Need a fake task for the filtering pipeline.
+		fakeTask := &api.Task{
+			Spec:     service.Spec.Task,
+			Endpoint: service.Endpoint,
+		}
+		fakeTask.Spec.Placement = placement
+
+		taskGroup := map[string]*api.Task{
+			serviceID: fakeTask,
+		}
+
+		s.pipeline.SetTask(fakeTask)
+
+		tree := s.nodeSet.tree("", prefs, 1, s.pipeline.Process, nodeLess)
+
+		schedulingDecisions := make(map[string]schedulingDecision, 1)
+		s.scheduleNTasksOnSubtree(ctx, 1, taskGroup, &tree, schedulingDecisions, nodeLess)
+		if len(taskGroup) != 0 {
+			s.noSuitableNode(ctx, taskGroup, schedulingDecisions)
+		}
+
+		decision := schedulingDecisions[serviceID]
+
+		// Apply decision to store
+		delete(s.unassignedStaticServices, serviceID)
+		needRetry := false
+
+		err := s.store.Update(func(tx store.Tx) error {
+			service = store.GetService(tx, serviceID)
+			if service == nil || service.StaticInfo.NodeID != "" {
+				// Service no longer exists or was assigned.
+				return nil
+			}
+
+			nodeID := decision.new.NodeID
+			if nodeID == "" {
+				// Unable to schedule.
+				message := "Unable to Schedule: Will Retry"
+				if errMessage := decision.new.Status.Err; errMessage != "" {
+					message = fmt.Sprintf("%s: %s", message, errMessage)
+				}
+				service.StaticInfo.Message = message
+				needRetry = true
+			} else {
+				// Successfully scheduled!
+				service.StaticInfo.NodeID = nodeID
+				service.StaticInfo.Message = ""
+			}
+
+			if err := store.UpdateService(tx, service); err != nil {
+				needRetry = true
+				log.G(ctx).WithError(err).Errorf("scheduler failed to update static service %s; will retry", serviceID)
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			needRetry = true
+			log.G(ctx).WithError(err).Errorf("scheduling static service %s transaction failed", serviceID)
+		}
+
+		if needRetry {
+			s.handleService(service)
+		} else {
+			// Add the service's assigned node to its peer group for
+			// anti-affinity constraints.
+			peerGroup := service.Spec.GetStatic().PeerGroup
+			if s.nodesByStaticPeerGroup[peerGroup] == nil {
+				s.nodesByStaticPeerGroup[peerGroup] = make(map[string]struct{})
+			}
+			s.nodesByStaticPeerGroup[peerGroup][service.StaticInfo.NodeID] = struct{}{}
+		}
+	}
+}
+
 // scheduleTaskGroup schedules a batch of tasks that are part of the same
 // service and share the same version of the spec.
 func (s *Scheduler) scheduleTaskGroup(ctx context.Context, taskGroup map[string]*api.Task, schedulingDecisions map[string]schedulingDecision) {
@@ -559,14 +755,18 @@ func (s *Scheduler) scheduleTaskGroup(ctx context.Context, taskGroup map[string]
 			}
 		}
 
-		tasksByServiceA := a.ActiveTasksCountByService[t.ServiceID]
-		tasksByServiceB := b.ActiveTasksCountByService[t.ServiceID]
+		// Stand-alone tasks do not have an associated service. Just use total
+		// active task count for those.
+		if t.ServiceID != "" {
+			tasksByServiceA := a.ActiveTasksCountByService[t.ServiceID]
+			tasksByServiceB := b.ActiveTasksCountByService[t.ServiceID]
 
-		if tasksByServiceA < tasksByServiceB {
-			return true
-		}
-		if tasksByServiceA > tasksByServiceB {
-			return false
+			if tasksByServiceA < tasksByServiceB {
+				return true
+			}
+			if tasksByServiceA > tasksByServiceB {
+				return false
+			}
 		}
 
 		// Total number of tasks breaks ties.
@@ -660,12 +860,17 @@ func (s *Scheduler) scheduleNTasksOnNodes(ctx context.Context, n int, taskGroup 
 			Timestamp: ptypes.MustTimestampProto(time.Now()),
 			Message:   "scheduler assigned task to node",
 		}
-		s.allTasks[t.ID] = &newT
 
-		nodeInfo, err := s.nodeSet.nodeInfo(node.ID)
-		if err == nil && nodeInfo.addTask(&newT) {
-			s.nodeSet.updateNode(nodeInfo)
-			nodes[nodeIter%nodeCount] = nodeInfo
+		// Skip this section for fake tasks (static services).
+		var nodeInfo NodeInfo
+		if t.ID != "" {
+			s.allTasks[t.ID] = &newT
+			var err error
+			nodeInfo, err = s.nodeSet.nodeInfo(node.ID)
+			if err == nil && nodeInfo.addTask(&newT) {
+				s.nodeSet.updateNode(nodeInfo)
+				nodes[nodeIter%nodeCount] = nodeInfo
+			}
 		}
 
 		schedulingDecisions[taskID] = schedulingDecision{old: t, new: &newT}
@@ -704,7 +909,7 @@ func (s *Scheduler) scheduleNTasksOnNodes(ctx context.Context, n int, taskGroup 
 
 func (s *Scheduler) noSuitableNode(ctx context.Context, taskGroup map[string]*api.Task, schedulingDecisions map[string]schedulingDecision) {
 	explanation := s.pipeline.Explain()
-	for _, t := range taskGroup {
+	for taskID, t := range taskGroup {
 		log.G(ctx).WithField("task.id", t.ID).Debug("no suitable node available for task")
 
 		newT := *t
@@ -714,10 +919,13 @@ func (s *Scheduler) noSuitableNode(ctx context.Context, taskGroup map[string]*ap
 		} else {
 			newT.Status.Err = "no suitable node"
 		}
-		s.allTasks[t.ID] = &newT
-		schedulingDecisions[t.ID] = schedulingDecision{old: t, new: &newT}
 
-		s.enqueue(&newT)
+		schedulingDecisions[taskID] = schedulingDecision{old: t, new: &newT}
+
+		if t.ID != "" { // Skip fake tasks (static services).
+			s.allTasks[t.ID] = &newT
+			s.enqueue(&newT)
+		}
 	}
 }
 

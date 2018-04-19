@@ -4475,6 +4475,15 @@ file {
       json_name: "global"
     }
     field {
+      name: "static"
+      number: 10
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.StaticService"
+      oneof_index: 0
+      json_name: "static"
+    }
+    field {
       name: "update"
       number: 6
       label: LABEL_OPTIONAL
@@ -4525,6 +4534,31 @@ file {
   }
   message_type {
     name: "GlobalService"
+  }
+  message_type {
+    name: "StaticService"
+    field {
+      name: "PeerGroup"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "PeerGroup"
+    }
+    field {
+      name: "PeerNetwork"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "PeerNetwork"
+    }
+    field {
+      name: "placement"
+      number: 5
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Placement"
+      json_name: "placement"
+    }
   }
   message_type {
     name: "TaskSpec"
@@ -5767,6 +5801,14 @@ file {
       type_name: ".docker.swarmkit.v1.UpdateStatus"
       json_name: "updateStatus"
     }
+    field {
+      name: "static_info"
+      number: 12
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.StaticInfo"
+      json_name: "staticInfo"
+    }
     options {
       70001 {
         1 {
@@ -5959,6 +6001,13 @@ file {
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.GenericResource"
       json_name: "assignedGenericResources"
+    }
+    field {
+      name: "is_standalone"
+      number: 16
+      label: LABEL_OPTIONAL
+      type: TYPE_BOOL
+      json_name: "isStandalone"
     }
     options {
       70001 {
@@ -6411,6 +6460,31 @@ file {
           6: 1
         }
       }
+    }
+  }
+  message_type {
+    name: "StaticInfo"
+    field {
+      name: "message"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "message"
+    }
+    field {
+      name: "node_id"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "nodeId"
+    }
+    field {
+      name: "network_attachment"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.NetworkAttachment"
+      json_name: "networkAttachment"
     }
   }
   syntax: "proto3"
@@ -7589,6 +7663,36 @@ file {
   message_type {
     name: "RemoveConfigResponse"
   }
+  message_type {
+    name: "CreateTaskRequest"
+    field {
+      name: "spec"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.TaskSpec"
+      json_name: "spec"
+    }
+    field {
+      name: "annotations"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Annotations"
+      json_name: "annotations"
+    }
+  }
+  message_type {
+    name: "CreateTaskResponse"
+    field {
+      name: "task"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Task"
+      json_name: "task"
+    }
+  }
   service {
     name: "Control"
     method {
@@ -7645,6 +7749,16 @@ file {
       name: "ListTasks"
       input_type: ".docker.swarmkit.v1.ListTasksRequest"
       output_type: ".docker.swarmkit.v1.ListTasksResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "CreateTask"
+      input_type: ".docker.swarmkit.v1.CreateTaskRequest"
+      output_type: ".docker.swarmkit.v1.CreateTaskResponse"
       options {
         73626345 {
           1: "swarm-manager"

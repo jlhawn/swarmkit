@@ -12,8 +12,10 @@ var (
 
 func init() {
 	Cmd.AddCommand(
+		createCmd,
 		listCmd,
 		inspectCmd,
+		logsCmd,
 		removeCmd,
 	)
 }

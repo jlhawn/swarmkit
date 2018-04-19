@@ -51,6 +51,9 @@ func (r *Resolver) get(t interface{}, id string) string {
 		if err != nil {
 			return id
 		}
+		if res.Task.IsStandalone {
+			return res.Task.Annotations.Name
+		}
 		svc := r.get(api.Service{}, res.Task.ServiceID)
 		return fmt.Sprintf("%s.%d", svc, res.Task.Slot)
 	default:

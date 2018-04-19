@@ -696,6 +696,13 @@ func (d *Dispatcher) processUpdates(ctx context.Context) {
 					schedulingDelayTimer.UpdateSince(start)
 				}
 
+				// There is no orchestrator for stand-alone tasks so we handle
+				// the desired state in the dispatcher when the task's current
+				// state has moved past RUNNING.
+				if task.IsStandalone && status.State > task.DesiredState && task.DesiredState == api.TaskStateRunning {
+					task.DesiredState = api.TaskStateShutdown
+				}
+
 				task.Status = *status
 				task.Status.AppliedBy = d.securityConfig.ClientTLSCreds.NodeID()
 				task.Status.AppliedAt = ptypes.MustTimestampProto(time.Now())

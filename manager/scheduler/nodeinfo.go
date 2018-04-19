@@ -72,7 +72,9 @@ func (nodeInfo *NodeInfo) removeTask(t *api.Task) bool {
 	delete(nodeInfo.Tasks, t.ID)
 	if oldTask.DesiredState <= api.TaskStateRunning {
 		nodeInfo.ActiveTasksCount--
-		nodeInfo.ActiveTasksCountByService[t.ServiceID]--
+		if t.ServiceID != "" {
+			nodeInfo.ActiveTasksCountByService[t.ServiceID]--
+		}
 	}
 
 	if t.Endpoint != nil {
@@ -111,12 +113,16 @@ func (nodeInfo *NodeInfo) addTask(t *api.Task) bool {
 		if t.DesiredState <= api.TaskStateRunning && oldTask.DesiredState > api.TaskStateRunning {
 			nodeInfo.Tasks[t.ID] = t
 			nodeInfo.ActiveTasksCount++
-			nodeInfo.ActiveTasksCountByService[t.ServiceID]++
+			if t.ServiceID != "" {
+				nodeInfo.ActiveTasksCountByService[t.ServiceID]++
+			}
 			return true
 		} else if t.DesiredState > api.TaskStateRunning && oldTask.DesiredState <= api.TaskStateRunning {
 			nodeInfo.Tasks[t.ID] = t
 			nodeInfo.ActiveTasksCount--
-			nodeInfo.ActiveTasksCountByService[t.ServiceID]--
+			if t.ServiceID != "" {
+				nodeInfo.ActiveTasksCountByService[t.ServiceID]--
+			}
 			return true
 		}
 		return false
@@ -147,7 +153,9 @@ func (nodeInfo *NodeInfo) addTask(t *api.Task) bool {
 
 	if t.DesiredState <= api.TaskStateRunning {
 		nodeInfo.ActiveTasksCount++
-		nodeInfo.ActiveTasksCountByService[t.ServiceID]++
+		if t.ServiceID != "" {
+			nodeInfo.ActiveTasksCountByService[t.ServiceID]++
+		}
 	}
 
 	return true
@@ -182,6 +190,10 @@ func (nodeInfo *NodeInfo) taskFailed(ctx context.Context, t *api.Task) {
 		nodeInfo.cleanupFailures(now)
 	}
 
+	if t.ServiceID == "" {
+		return // Nothing else to do for stand-alone tasks.
+	}
+
 	versionedService := versionedService{serviceID: t.ServiceID}
 	if t.SpecVersion != nil {
 		versionedService.specVersion = *t.SpecVersion
@@ -204,6 +216,10 @@ func (nodeInfo *NodeInfo) taskFailed(ctx context.Context, t *api.Task) {
 // countRecentFailures returns the number of times the service has failed on
 // this node within the lookback window monitorFailures.
 func (nodeInfo *NodeInfo) countRecentFailures(now time.Time, t *api.Task) int {
+	if t.ServiceID == "" {
+		return 0 // Nothing to compare for stand-alone tasks.
+	}
+
 	versionedService := versionedService{serviceID: t.ServiceID}
 	if t.SpecVersion != nil {
 		versionedService.specVersion = *t.SpecVersion

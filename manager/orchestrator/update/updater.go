@@ -342,7 +342,10 @@ func (u *Updater) worker(ctx context.Context, queue <-chan orchestrator.Slot, up
 			updated := orchestrator.NewTask(u.cluster, u.newService, slot[0].Slot, "")
 			if orchestrator.IsGlobalService(u.newService) {
 				updated = orchestrator.NewTask(u.cluster, u.newService, slot[0].Slot, slot[0].NodeID)
+			} else if orchestrator.IsStaticService(u.newService) {
+				updated = orchestrator.NewTask(u.cluster, u.newService, slot[0].Slot, u.newService.StaticInfo.NodeID)
 			}
+
 			updated.DesiredState = api.TaskStateReady
 
 			if err := u.updateTask(ctx, slot, updated, updateConfig.Order); err != nil {

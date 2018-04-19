@@ -193,6 +193,62 @@ func (na *cnmNetworkAllocator) Deallocate(n *api.Network) error {
 	return na.freePools(n, localNet.pools)
 }
 
+// RestoreNetwork restores the allocations for this network if there are
+// any.
+func (na *cnmNetworkAllocator) RestoreNetwork(n *api.Network) error {
+	// The Network is considered allocated only if the DriverState and IPAM are
+	// NOT nil.
+	if n.DriverState == nil || n.IPAM == nil {
+		return nil // Nothing to restore.
+	}
+
+	return na.Allocate(n)
+}
+
+// RestoreService restores the allocations for this service if there are
+// any.
+func (na *cnmNetworkAllocator) RestoreService(s *api.Service) error {
+	if err := na.portAllocator.serviceRestorePorts(s); err != nil {
+		return err
+	}
+
+	if s.Endpoint != nil && len(s.Endpoint.VirtualIPs) > 0 {
+		// Restore VIPs.
+		for _, eAttach := range s.Endpoint.VirtualIPs {
+			// Attempt to allocate the previously chosen IP.
+			if err := na.allocateVIP(eAttach); err != nil {
+				return err
+			}
+		}
+
+		na.services[s.ID] = struct{}{}
+	}
+
+	if s.StaticInfo != nil && s.StaticInfo.NetworkAttachment != nil && len(s.StaticInfo.NetworkAttachment.Addresses) > 0 {
+		// Attempt to allocate the previously chosen IP.
+		if err := na.allocateNetworkIPs(s.StaticInfo.NetworkAttachment); err != nil {
+			return err
+		}
+
+		na.services[s.ID] = struct{}{}
+	}
+
+	return nil
+}
+
+func needsStaticNetworkAttachment(s *api.Service) bool {
+	if s.StaticInfo == nil {
+		return false // This is not a static service.
+	}
+
+	if s.StaticInfo.NetworkAttachment == nil {
+		return false // No network attachment config.
+	}
+
+	// No static address allocated yet?
+	return len(s.StaticInfo.NetworkAttachment.Addresses) == 0
+}
+
 // AllocateService allocates all the network resources such as virtual
 // IP and ports needed by the service.
 func (na *cnmNetworkAllocator) AllocateService(s *api.Service) (err error) {
@@ -204,6 +260,15 @@ func (na *cnmNetworkAllocator) AllocateService(s *api.Service) (err error) {
 			na.DeallocateService(s)
 		}
 	}()
+
+	if needsStaticNetworkAttachment(s) {
+		nAttach := s.StaticInfo.NetworkAttachment
+		if localNet := na.getNetwork(nAttach.Network.ID); localNet != nil {
+			if err := na.allocateNetworkIPs(nAttach); err != nil {
+				return errors.Wrapf(err, "failed to allocate network IP for static service %s network %s", s.ID, nAttach.Network.ID)
+			}
+		}
+	}
 
 	if s.Endpoint == nil {
 		s.Endpoint = &api.Endpoint{}
@@ -371,6 +436,10 @@ func (na *cnmNetworkAllocator) IsServiceAllocated(s *api.Service, flags ...func(
 		flag(&options)
 	}
 
+	if s.StaticInfo != nil && (s.StaticInfo.NetworkAttachment == nil || len(s.StaticInfo.NetworkAttachment.Addresses) == 0) {
+		return false // The static network attachment needs to be allocated.
+	}
+
 	specNetworks := serviceNetworks(s)
 
 	// If endpoint mode is VIP and allocator does not have the
@@ -466,6 +535,20 @@ func (na *cnmNetworkAllocator) DeallocateTask(t *api.Task) error {
 	return na.releaseEndpoints(t.Networks)
 }
 
+// RestoreTask restores the allocations for this task if there are any.
+func (na *cnmNetworkAllocator) RestoreTask(t *api.Task) error {
+	for _, nAttach := range t.Networks {
+		if len(nAttach.Addresses) > 0 {
+			if err := na.allocateNetworkIPs(nAttach); err != nil {
+				return err
+			}
+
+			na.tasks[t.ID] = struct{}{}
+		}
+	}
+	return nil
+}
+
 // IsAttachmentAllocated returns if the passed node and network has resources allocated or not.
 func (na *cnmNetworkAllocator) IsAttachmentAllocated(node *api.Node, networkAttachment *api.NetworkAttachment) bool {
 	if node == nil {
@@ -510,7 +593,6 @@ func (na *cnmNetworkAllocator) IsAttachmentAllocated(node *api.Node, networkAtta
 // AllocateAttachment allocates the IP addresses for a LB in a network
 // on a given node
 func (na *cnmNetworkAllocator) AllocateAttachment(node *api.Node, networkAttachment *api.NetworkAttachment) error {
-
 	if err := na.allocateNetworkIPs(networkAttachment); err != nil {
 		return err
 	}
@@ -533,6 +615,17 @@ func (na *cnmNetworkAllocator) DeallocateAttachment(node *api.Node, networkAttac
 	}
 
 	return na.releaseEndpoints([]*api.NetworkAttachment{networkAttachment})
+}
+
+// RestoreNode restores the allocations for this node if there are any.
+func (na *cnmNetworkAllocator) RestoreNode(node *api.Node, networkAttachment *api.NetworkAttachment) error {
+	// If Addresses is empty, there's nothing to restore.
+	if len(networkAttachment.Addresses) == 0 {
+		return nil
+	}
+
+	// Attempt to allocate the previously chosen IP.
+	return na.AllocateAttachment(node, networkAttachment)
 }
 
 func (na *cnmNetworkAllocator) releaseEndpoints(networks []*api.NetworkAttachment) error {

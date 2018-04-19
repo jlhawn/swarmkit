@@ -6,13 +6,14 @@ import (
 	"github.com/spf13/pflag"
 )
 
-func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
+// parseContainer parses container options.
+func parseContainer(flags *pflag.FlagSet, spec *api.TaskSpec) error {
 	if flags.Changed("image") {
 		image, err := flags.GetString("image")
 		if err != nil {
 			return err
 		}
-		spec.Task.GetContainer().Image = image
+		spec.GetContainer().Image = image
 	}
 
 	if flags.Changed("hostname") {
@@ -20,7 +21,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 		if err != nil {
 			return err
 		}
-		spec.Task.GetContainer().Hostname = hostname
+		spec.GetContainer().Hostname = hostname
 	}
 
 	if flags.Changed("command") {
@@ -28,7 +29,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 		if err != nil {
 			return err
 		}
-		spec.Task.GetContainer().Command = command
+		spec.GetContainer().Command = command
 	}
 
 	if flags.Changed("args") {
@@ -36,7 +37,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 		if err != nil {
 			return err
 		}
-		spec.Task.GetContainer().Args = args
+		spec.GetContainer().Args = args
 	}
 
 	if flags.Changed("env") {
@@ -44,7 +45,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 		if err != nil {
 			return err
 		}
-		spec.Task.GetContainer().Env = env
+		spec.GetContainer().Env = env
 	}
 
 	if flags.Changed("tty") {
@@ -53,7 +54,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 			return err
 		}
 
-		spec.Task.GetContainer().TTY = tty
+		spec.GetContainer().TTY = tty
 	}
 
 	if flags.Changed("open-stdin") {
@@ -62,7 +63,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 			return err
 		}
 
-		spec.Task.GetContainer().OpenStdin = openStdin
+		spec.GetContainer().OpenStdin = openStdin
 	}
 
 	if flags.Changed("init") {
@@ -71,7 +72,7 @@ func parseContainer(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
 			return err
 		}
 
-		spec.Task.GetContainer().Init = &gogotypes.BoolValue{
+		spec.GetContainer().Init = &gogotypes.BoolValue{
 			Value: init,
 		}
 	}

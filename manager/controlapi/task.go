@@ -1,14 +1,93 @@
 package controlapi
 
 import (
+	"time"
+
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/api/naming"
+	"github.com/docker/swarmkit/identity"
 	"github.com/docker/swarmkit/manager/orchestrator"
 	"github.com/docker/swarmkit/manager/state/store"
+	"github.com/docker/swarmkit/protobuf/ptypes"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// CreateTask creates and returns a stand-alone Task based on the provided
+// TaskSpec.
+// - Returns `InvalidArgument` if the TaskSpec is malformed.
+// - Returns `Unimplemented` if the TaskSpec references unimplemented features.
+// - Returns `AlreadyExists` if the TaskSpec conflicts.
+// - Returns an error if the creation fails.
+func (s *Server) CreateTask(ctx context.Context, request *api.CreateTaskRequest) (*api.CreateTaskResponse, error) {
+	if request.Spec == nil || request.Annotations == nil {
+		return nil, status.Errorf(codes.InvalidArgument, errInvalidArgument.Error())
+	}
+	if err := validateAnnotations(*request.Annotations); err != nil {
+		return nil, err
+	}
+	if err := validateTaskSpec(*request.Spec); err != nil {
+		return nil, err
+	}
+	if err := s.validateNetworks(request.Spec.Networks); err != nil {
+		return nil, err
+	}
+
+	// TODO(aluzzardi): Consider using `Name` as a primary key to handle
+	// duplicate creations. See #65
+	task := &api.Task{
+		ID:          identity.NewID(),
+		Spec:        *request.Spec,
+		Annotations: *request.Annotations,
+		Status: api.TaskStatus{
+			State:     api.TaskStateNew,
+			Timestamp: ptypes.MustTimestampProto(time.Now()),
+			Message:   "created",
+		},
+		DesiredState: api.TaskStateRunning,
+		IsStandalone: true,
+	}
+
+	err := s.store.Update(func(tx store.Tx) error {
+		// Check to see if all the secrets being added exist as objects
+		// in our datastore
+		err := s.checkSecretExistence(tx, *request.Spec)
+		if err != nil {
+			return err
+		}
+		err = s.checkConfigExistence(tx, *request.Spec)
+		if err != nil {
+			return err
+		}
+
+		if request.Spec.LogDriver != nil {
+			// use the log driver specific to the task, if we have it.
+			task.LogDriver = request.Spec.LogDriver
+		} else {
+			// pick up the cluster default, if available.
+			// lookup the cluster
+			clusters, err := store.FindClusters(tx, store.ByName(store.DefaultClusterName))
+			if err != nil {
+				return err
+			}
+			if len(clusters) != 1 {
+				return status.Errorf(codes.Internal, "could not fetch cluster object")
+			}
+			cluster := clusters[0]
+			task.LogDriver = cluster.Spec.TaskDefaults.LogDriver
+		}
+
+		return store.CreateTask(tx, task)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.CreateTaskResponse{
+		Task: task,
+	}, nil
+}
 
 // GetTask returns a Task given a TaskID.
 // - Returns `InvalidArgument` if TaskID is not provided.

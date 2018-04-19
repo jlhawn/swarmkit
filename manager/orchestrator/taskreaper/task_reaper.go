@@ -138,6 +138,9 @@ func (tr *TaskReaper) Run(ctx context.Context) {
 				}] = struct{}{}
 			case api.EventUpdateTask:
 				t := v.Task
+				if t.IsStandalone {
+					break // Never cleanup stand-alone tasks.
+				}
 				// add serviceless orphaned tasks
 				if t.Status.State >= api.TaskStateOrphaned && t.ServiceID == "" {
 					tr.cleanup = append(tr.cleanup, t.ID)

@@ -29,6 +29,9 @@ service Control {
 	rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
 		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
 	};
+	rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
 	rpc RemoveTask(RemoveTaskRequest) returns (RemoveTaskResponse) {
 		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
 	};
@@ -552,3 +555,12 @@ message RemoveConfigRequest {
 // RemoveConfigResponse is an empty object indicating the successful removal of
 // a config.
 message RemoveConfigResponse {}
+
+message CreateTaskRequest {
+	TaskSpec spec = 1;
+	Annotations annotations = 2;
+}
+
+message CreateTaskResponse {
+	Task task = 1;
+}

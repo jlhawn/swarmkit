@@ -14,14 +14,14 @@ import (
 // parseTmpfs supports a simple tmpfs decl, similar to docker run.
 //
 // This should go away.
-func parseTmpfs(flags *pflag.FlagSet, spec *api.ServiceSpec) error {
+func parseTmpfs(flags *pflag.FlagSet, spec *api.TaskSpec) error {
 	if flags.Changed("tmpfs") {
 		tmpfss, err := flags.GetStringSlice("tmpfs")
 		if err != nil {
 			return err
 		}
 
-		container := spec.Task.GetContainer()
+		container := spec.GetContainer()
 		// TODO(stevvooe): Nasty inline parsing code, replace with mount syntax.
 		for _, tmpfs := range tmpfss {
 			parts := strings.SplitN(tmpfs, ":", 2)

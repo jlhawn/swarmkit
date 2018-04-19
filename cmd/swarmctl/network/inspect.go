@@ -60,6 +60,7 @@ func printNetworkSummary(network *api.Network) {
 	}
 	fmt.Fprintf(w, "  IPv6Enabled\t: %t\n", spec.Ipv6Enabled)
 	fmt.Fprintf(w, "  Internal\t: %t\n", spec.Internal)
+	fmt.Fprintf(w, "  Attachable\t: %t\n", spec.Attachable)
 
 	driver := network.DriverState
 	if driver != nil {

@@ -87,6 +87,8 @@
 		CreateConfigResponse
 		RemoveConfigRequest
 		RemoveConfigResponse
+		CreateTaskRequest
+		CreateTaskResponse
 		SessionRequest
 		SessionMessage
 		HeartbeatRequest
@@ -124,6 +126,7 @@
 		Config
 		Resource
 		Extension
+		StaticInfo
 		RaftMember
 		JoinRequest
 		JoinResponse
@@ -148,6 +151,7 @@
 		ServiceSpec
 		ReplicatedService
 		GlobalService
+		StaticService
 		TaskSpec
 		ResourceReference
 		GenericRuntimeSpec

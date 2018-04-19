@@ -45,6 +45,10 @@ type NetworkAllocator interface {
 	// which were assigned to the passed network.
 	Deallocate(n *api.Network) error
 
+	// RestoreNetwork restores the allocations for this network if there are
+	// any.
+	RestoreNetwork(n *api.Network) error
+
 	//
 	// Service Allocation
 	//
@@ -60,6 +64,10 @@ type NetworkAllocator interface {
 	// DeallocateService de-allocates all the network resources such as
 	// virtual IP and ports associated with the service.
 	DeallocateService(s *api.Service) error
+
+	// RestoreService restores the allocations for this service if there are
+	// any.
+	RestoreService(s *api.Service) error
 
 	// HostPublishPortsNeedUpdate returns true if the passed service needs
 	// allocations for its published ports in host (non ingress) mode
@@ -81,6 +89,13 @@ type NetworkAllocator interface {
 	// networks that a task is attached to.
 	DeallocateTask(t *api.Task) error
 
+	// RestoreTask restores the allocations for this task if there are any.
+	RestoreTask(t *api.Task) error
+
+	//
+	// Node Allocation
+	//
+
 	// AllocateAttachment Allocates a load balancer endpoint for the node
 	AllocateAttachment(node *api.Node, networkAttachment *api.NetworkAttachment) error
 
@@ -89,6 +104,9 @@ type NetworkAllocator interface {
 
 	// IsAttachmentAllocated If lb endpoint is allocated on the node
 	IsAttachmentAllocated(node *api.Node, networkAttachment *api.NetworkAttachment) bool
+
+	// RestoreNode restores the allocations for this node if there are any.
+	RestoreNode(node *api.Node, networkAttachment *api.NetworkAttachment) error
 }
 
 // IsIngressNetwork check if the network is an ingress network

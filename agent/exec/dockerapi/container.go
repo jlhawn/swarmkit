@@ -491,11 +491,17 @@ func (c *containerConfig) networkingConfig() *network.NetworkingConfig {
 			}
 		}
 
+		aliases := make([]string, 0, len(na.Aliases)+1)
+		if !c.task.IsStandalone {
+			aliases = append(aliases, c.task.ServiceAnnotations.Name)
+		}
+
 		epSettings := &network.EndpointSettings{
 			IPAMConfig: &network.EndpointIPAMConfig{
 				IPv4Address: ipv4,
 				IPv6Address: ipv6,
 			},
+			Aliases: aliases,
 		}
 
 		epConfig[na.Network.Spec.Annotations.Name] = epSettings
@@ -530,6 +536,7 @@ func (c *containerConfig) networkCreateOptions(name string) (types.NetworkCreate
 		},
 		Options:        na.Network.DriverState.Options,
 		CheckDuplicate: true,
+		Attachable:     na.Network.Spec.Attachable,
 	}
 
 	for _, ic := range na.Network.IPAM.Configs {

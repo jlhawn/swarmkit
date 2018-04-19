@@ -122,6 +122,11 @@ message Service {
 	// UpdateStatus contains the status of an update, if one is in
 	// progress.
 	UpdateStatus update_status = 5;
+
+	// StaticInfo contains information for the service if its spec specifies
+	// "static" mode, in which case this info records which node it is assigned
+	// to and its network identity.
+	StaticInfo static_info = 12;
 }
 
 // Endpoint specified all the network parameters required to
@@ -247,6 +252,8 @@ message Task {
 	Driver log_driver = 13;
 
 	repeated GenericResource assigned_generic_resources = 15;
+
+	bool is_standalone = 16;
 }
 
 // NetworkAttachment specifies the network parameters of attachment to
@@ -455,4 +462,12 @@ message Extension {
 	//
 	// // Indices, with values expressed as Go templates.
 	//repeated IndexEntry index_templates = 6;
+}
+
+// StaticInfo records the scheduled node ID, allocated network address, and
+// status message for a static service.
+message StaticInfo {
+	string message = 1;
+	string node_id = 2;
+	NetworkAttachment network_attachment = 3;
 }

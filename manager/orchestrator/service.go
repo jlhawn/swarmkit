@@ -27,6 +27,15 @@ func IsGlobalService(service *api.Service) bool {
 	return ok
 }
 
+// IsStaticService checks if the service is a static service.
+func IsStaticService(service *api.Service) bool {
+	if service == nil {
+		return false
+	}
+	_, ok := service.Spec.GetMode().(*api.ServiceSpec_Static)
+	return ok
+}
+
 // SetServiceTasksRemove sets the desired state of tasks associated with a service
 // to REMOVE, so that they can be properly shut down by the agent and later removed
 // by the task reaper.
