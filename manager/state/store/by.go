@@ -212,3 +212,13 @@ func ByCustomPrefix(objType, index, value string) By {
 		value:   value,
 	}
 }
+
+type byPeerGroup string
+
+func (b byPeerGroup) isBy() {
+}
+
+// ByPeerGroup creates an object to pass to Find to select by peer group.
+func ByPeerGroup(peerGroup string) By {
+	return byPeerGroup(peerGroup)
+}

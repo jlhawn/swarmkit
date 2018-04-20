@@ -1,7 +1,9 @@
 package dispatcher
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
 
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/api/equality"
@@ -123,6 +125,92 @@ func (a *assignmentSet) addTaskDependencies(readTx store.ReadTx, t *api.Task) {
 		}
 		a.tasksUsingDependency[mapKey][t.ID] = struct{}{}
 	}
+
+	a.maybeAddStaticServiceDependencies(readTx, t)
+}
+
+// deCIDR removes the trailing CIDR suffix from an IP address, e.g.,
+// "10.0.0.4/34" -> "10.0.0.4"
+func (a *assignmentSet) deCIDR(addressWithCIDR string) string {
+	ip, _, err := net.ParseCIDR(addressWithCIDR)
+	if err != nil {
+		a.log.WithError(err).Warnf("unable to parse CIDR address %s", addressWithCIDR)
+		return addressWithCIDR // Return original address.
+	}
+
+	return ip.String()
+}
+
+// maybeAddStaticServiceDependencies adds a config assignment for the peer
+// group materialized config if the task is part of a static service.
+func (a *assignmentSet) maybeAddStaticServiceDependencies(readTx store.ReadTx, t *api.Task) {
+	if t.ServiceID == "" {
+		return
+	}
+
+	service := store.GetService(readTx, t.ServiceID)
+	if service == nil || service.Spec.GetStatic() == nil {
+		return
+	}
+
+	peerGroup := service.Spec.GetStatic().PeerGroup
+	peerServices, err := store.FindServices(readTx, store.ByPeerGroup(peerGroup))
+	if err != nil {
+		a.log.WithError(err).Errorf("unable to find services by peer group %s", peerGroup)
+		return
+	}
+
+	// Maps peer service name to static IP.
+	peerAddrs := make(map[string]string)
+	for _, peerService := range peerServices {
+		if peerService.ID == service.ID {
+			continue // Skip your own service.
+		}
+		// Ensure peer service has been allocated a static IP.
+		if service.StaticInfo.NetworkAttachment != nil {
+			peerName := peerService.Spec.Annotations.Name
+			peerAddr := a.deCIDR(peerService.StaticInfo.NetworkAttachment.Addresses[0])
+			peerAddrs[peerName] = peerAddr
+		}
+	}
+
+	selfName := service.Spec.Annotations.Name
+	selfAddr := a.deCIDR(service.StaticInfo.NetworkAttachment.Addresses[0])
+
+	cfg := peerGroupConfig{
+		SelfName: selfName,
+		SelfAddr: selfAddr,
+		Peers:    peerAddrs,
+	}
+
+	configData, err := json.MarshalIndent(cfg, "", "  ")
+
+	// The peer group may change so each task gets a unique config ID.
+	configID := fmt.Sprintf("%s-peer-group", t.ID)
+	mapKey := typeAndID{objType: api.ResourceType_CONFIG, id: configID}
+	if len(a.tasksUsingDependency[mapKey]) == 0 {
+		a.tasksUsingDependency[mapKey] = make(map[string]struct{})
+		a.changes[mapKey] = &api.AssignmentChange{
+			Assignment: &api.Assignment{
+				Item: &api.Assignment_Config{
+					Config: &api.Config{
+						ID: configID,
+						Spec: api.ConfigSpec{
+							Data: configData,
+						},
+					},
+				},
+			},
+			Action: api.AssignmentChange_AssignmentActionUpdate,
+		}
+	}
+	a.tasksUsingDependency[mapKey][t.ID] = struct{}{}
+}
+
+type peerGroupConfig struct {
+	SelfName string            `json:"selfName"`
+	SelfAddr string            `json:"selfAddr"`
+	Peers    map[string]string `json:"peers"`
 }
 
 func (a *assignmentSet) releaseDependency(mapKey typeAndID, assignment *api.Assignment, taskID string) bool {
@@ -196,6 +284,19 @@ func (a *assignmentSet) releaseTaskDependencies(t *api.Task) bool {
 	}
 
 	for _, configRef := range configs {
+		configID := configRef.ConfigID
+		mapKey := typeAndID{objType: api.ResourceType_CONFIG, id: configID}
+		assignment := &api.Assignment{
+			Item: &api.Assignment_Config{
+				Config: &api.Config{ID: configID},
+			},
+		}
+		if a.releaseDependency(mapKey, assignment, t.ID) {
+			modified = true
+		}
+	}
+
+	for _, configRef := range t.MaterializedConfigs {
 		configID := configRef.ConfigID
 		mapKey := typeAndID{objType: api.ResourceType_CONFIG, id: configID}
 		assignment := &api.Assignment{

@@ -767,6 +767,12 @@ func (tx readTx) findIterators(table string, by By, checkType func(By) error) ([
 			return nil, err
 		}
 		return []memdb.ResultIterator{it}, nil
+	case byPeerGroup:
+		it, err := tx.memDBTx.Get(table, indexPeerGroup, strings.ToLower(string(v)))
+		if err != nil {
+			return nil, err
+		}
+		return []memdb.ResultIterator{it}, nil
 	default:
 		return nil, ErrInvalidFindBy
 	}

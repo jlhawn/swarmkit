@@ -455,6 +455,11 @@ func validateMode(s *api.ServiceSpec) error {
 		if m.Static.PeerGroup == "" {
 			return status.Errorf(codes.InvalidArgument, "static mode: peer group must be provided")
 		}
+		if !isValidDNSName.MatchString(m.Static.PeerGroup) {
+			// if the name doesn't match the regex
+			return status.Errorf(codes.InvalidArgument, "static mode: peer group must be valid as a DNS name component")
+		}
+		m.Static.PeerGroup = strings.ToLower(m.Static.PeerGroup) // Normalize to be lower-case.
 		if m.Static.PeerNetwork == "" {
 			return status.Error(codes.InvalidArgument, "static mode: peer network must be provided")
 		}

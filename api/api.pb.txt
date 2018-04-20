@@ -6009,6 +6009,14 @@ file {
       type: TYPE_BOOL
       json_name: "isStandalone"
     }
+    field {
+      name: "materialized_configs"
+      number: 17
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.ConfigReference"
+      json_name: "materializedConfigs"
+    }
     options {
       70001 {
         1 {

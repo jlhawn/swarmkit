@@ -254,6 +254,8 @@ message Task {
 	repeated GenericResource assigned_generic_resources = 15;
 
 	bool is_standalone = 16;
+
+	repeated ConfigReference materialized_configs = 17;
 }
 
 // NetworkAttachment specifies the network parameters of attachment to

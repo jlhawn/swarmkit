@@ -84,5 +84,9 @@ func Restrict(configs exec.ConfigGetter, t *api.Task) exec.ConfigGetter {
 		}
 	}
 
+	for _, configRef := range t.MaterializedConfigs {
+		cids[configRef.ConfigID] = struct{}{}
+	}
+
 	return &taskRestrictedConfigsProvider{configs: configs, configIDs: cids}
 }

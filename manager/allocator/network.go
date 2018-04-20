@@ -732,16 +732,41 @@ func (a *Allocator) restoreTasks(ctx context.Context) error {
 			continue
 		}
 
-		if nc.nwkAllocator.IsTaskAllocated(t) {
-			continue
-		}
+		// If the task is part of a static service, remove the static services
+		// network attachment which should already have been restored with the
+		// service.
+		taskCopy := t.Copy()
+		a.store.View(func(tx store.ReadTx) {
+			removeStaticServiceAttachment(ctx, tx, taskCopy)
+		})
 
-		if err := nc.nwkAllocator.RestoreTask(t); err != nil {
+		if err := nc.nwkAllocator.RestoreTask(taskCopy); err != nil {
 			return errors.Wrapf(err, "unable to restore task %s", t.ID)
 		}
 	}
 
 	return nil
+}
+
+func removeStaticServiceAttachment(ctx context.Context, tx store.ReadTx, t *api.Task) {
+	if t.ServiceID == "" {
+		// Ignore stand-alone tasks.
+		return
+	}
+
+	s := store.GetService(tx, t.ServiceID)
+	if s == nil || s.StaticInfo == nil || s.StaticInfo.NetworkAttachment == nil {
+		return // Either doesn't exist, not static, or not allocated yet.
+	}
+
+	staticNetworkID := s.StaticInfo.NetworkAttachment.Network.ID
+	nonStaticAttachments := []*api.NetworkAttachment{}
+	for _, nAttach := range t.Networks {
+		if nAttach.Network.ID != staticNetworkID {
+			nonStaticAttachments = append(nonStaticAttachments, nAttach)
+		}
+	}
+	t.Networks = nonStaticAttachments
 }
 
 // allocateTasks allocates tasks in the store so far before we started watching.
@@ -916,7 +941,14 @@ func (a *Allocator) doTaskAlloc(ctx context.Context, ev events.Event) {
 	// resources associated with the task right away.
 	if t.Status.State > api.TaskStateRunning || isDelete {
 		if nc.nwkAllocator.IsTaskAllocated(t) {
-			if err := nc.nwkAllocator.DeallocateTask(t); err != nil {
+			// Be careful to *not* deallocate a static service network
+			// attachment here.
+			taskCopy := t.Copy()
+			a.store.View(func(tx store.ReadTx) {
+				removeStaticServiceAttachment(ctx, tx, taskCopy)
+			})
+
+			if err := nc.nwkAllocator.DeallocateTask(taskCopy); err != nil {
 				log.G(ctx).WithError(err).Errorf("Failed freeing network resources for task %s", t.ID)
 			} else {
 				nc.somethingWasDeallocated = true
@@ -1076,7 +1108,10 @@ func (a *Allocator) allocateService(ctx context.Context, s *api.Service) error {
 			return fmt.Errorf("failed to retrieve network %s while allocating static service %s", staticConfig.PeerNetwork, s.ID)
 		}
 
-		s.StaticInfo.NetworkAttachment = &api.NetworkAttachment{Network: n}
+		s.StaticInfo.NetworkAttachment = &api.NetworkAttachment{
+			Network: n,
+			Aliases: []string{staticConfig.PeerGroup},
+		}
 		s.StaticInfo.Message = "allocated static network address"
 	}
 
@@ -1235,7 +1270,12 @@ func (a *Allocator) allocateTask(ctx context.Context, t *api.Task) (err error) {
 				na.Network = n
 			}
 
-			if err = nc.nwkAllocator.AllocateTask(t); err != nil {
+			// Allocate the tasks's network attachements being careful not to
+			// re-allocate a static service network attachment.
+			taskCopy := t.Copy()
+			removeStaticServiceAttachment(ctx, tx, taskCopy)
+
+			if err = nc.nwkAllocator.AllocateTask(taskCopy); err != nil {
 				return
 			}
 			if nc.nwkAllocator.IsTaskAllocated(t) {
@@ -1264,8 +1304,33 @@ func (a *Allocator) allocateTask(ctx context.Context, t *api.Task) (err error) {
 	return nil
 }
 
+func injectStaticServiceAttachment(ctx context.Context, tx store.ReadTx, t *api.Task) {
+	if t.ServiceID == "" {
+		// Ignore stand-alone tasks.
+		return
+	}
+
+	s := store.GetService(tx, t.ServiceID)
+	if s == nil || s.StaticInfo == nil || s.StaticInfo.NetworkAttachment == nil {
+		return // Either doesn't exist, not static, or not allocated yet.
+	}
+
+	staticAttachment := s.StaticInfo.NetworkAttachment
+
+	attachments := []*api.NetworkAttachment{staticAttachment}
+	for _, nAttach := range t.Networks {
+		if nAttach.Network.ID != staticAttachment.Network.ID {
+			attachments = append(attachments, nAttach)
+		}
+	}
+	t.Networks = attachments
+}
+
 func (a *Allocator) commitAllocatedTask(ctx context.Context, batch *store.Batch, t *api.Task) error {
+	t = t.Copy()
 	return batch.Update(func(tx store.Tx) error {
+		injectStaticServiceAttachment(ctx, tx, t)
+
 		err := store.UpdateTask(tx, t)
 
 		if err == store.ErrSequenceConflict {

@@ -109,6 +109,13 @@ func init() {
 // CreateTask adds a new task to the store.
 // Returns ErrExist if the ID is already taken.
 func CreateTask(tx Tx, t *api.Task) error {
+	// For stand-alone tasks, ensure the name is not already in use.
+	if t.IsStandalone {
+		if tx.lookup(tableTask, indexName, strings.ToLower(t.Annotations.Name)) != nil {
+			return ErrNameConflict
+		}
+	}
+
 	return tx.create(tableTask, t)
 }
 
@@ -164,6 +171,10 @@ func (ti taskIndexerByName) FromObject(obj interface{}) (bool, []byte, error) {
 	t := obj.(*api.Task)
 
 	name := naming.Task(t)
+	if t.IsStandalone {
+		// Stand-Alone tasks should use the annotation name.
+		name = t.Annotations.Name
+	}
 
 	// Add the null character as a terminator
 	return true, []byte(strings.ToLower(name) + "\x00"), nil

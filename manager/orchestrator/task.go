@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -48,6 +49,23 @@ func NewTask(cluster *api.Cluster, service *api.Service, slot uint64, nodeID str
 	}
 
 	return &task
+}
+
+// PeerGroupConfigRef returns a config reference for a static service's
+// materialized peer group config file.
+func PeerGroupConfigRef(task *api.Task) *api.ConfigReference {
+	return &api.ConfigReference{
+		ConfigID:   fmt.Sprintf("%s-peer-group", task.ID),
+		ConfigName: "peer-group",
+		Target: &api.ConfigReference_File{
+			File: &api.FileTarget{
+				Name: "/run/peers",
+				Mode: 0444,
+				UID:  "0",
+				GID:  "0",
+			},
+		},
+	}
 }
 
 // RestartCondition returns the restart condition to apply to this task.
