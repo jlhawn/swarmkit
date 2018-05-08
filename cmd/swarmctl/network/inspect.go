@@ -28,7 +28,8 @@ var (
 			if err != nil {
 				return err
 			}
-			network, err := GetNetwork(common.Context(cmd), c, args[0])
+			resolver := common.NewResolver(cmd, c)
+			network, err := resolver.LookupNetwork(args[0])
 			if err != nil {
 				return err
 			}

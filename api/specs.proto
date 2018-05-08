@@ -103,13 +103,10 @@ message GlobalService {
 // StaticService sets the reconcilation target to always have a single task
 // running on a predetermined node with a static network identity.
 message StaticService {
-	// PeerGroup declares the name of the peer group which this service is a
-	// member of.
-	string PeerGroup = 1;
-	// PeerNetwork specifies network that this server will use to connect to
-	// its peers. This value must be a network ID and that network must be in
-	// the network attachements list in the service task spec.
-	string PeerNetwork = 2;
+	// PeerGroup specifies the ID of the peer group which this service is a
+	// member of. This service will automatically be given a network attachment
+	// on the PeerGroup's specified network.
+	string peerGroup = 1;
 	// Placement specifies node selection constraints. These are used to first
 	// decide which node the task for this static service should be scheduled
 	// on. The Task spec should not have a Placement section as this value will
@@ -117,7 +114,16 @@ message StaticService {
 	// service is initially assigned to and will never change, even if the
 	// selected node no longer meets the placement constraints in the future
 	// (hence the term "static").
-	Placement placement = 5;
+	Placement placement = 3;
+}
+
+message PeerGroupSpec {
+	Annotations annotations = 1 [(gogoproto.nullable) = false];
+	// Network specifies network that this services in this peer group will use
+	// to connect to their peers. This value must be a network ID and that
+	// network will automatically be added to the network attachements list in
+	// the services' task spec.
+	string network = 2;
 }
 
 message TaskSpec {

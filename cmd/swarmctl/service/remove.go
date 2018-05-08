@@ -28,8 +28,10 @@ var (
 				return err
 			}
 
+			resolver := common.NewResolver(cmd, c)
+
 			for _, serviceName := range args {
-				service, err := getService(common.Context(cmd), c, serviceName)
+				service, err := resolver.LookupService(serviceName)
 				if err != nil {
 					return err
 				}

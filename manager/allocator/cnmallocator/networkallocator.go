@@ -236,6 +236,66 @@ func (na *cnmNetworkAllocator) RestoreService(s *api.Service) error {
 	return nil
 }
 
+func (na *cnmNetworkAllocator) RestorePeerGroup(peerGroup *api.PeerGroup) error {
+	// Note: no port allocations for peer groups.
+
+	if peerGroup.Endpoint == nil || len(peerGroup.Endpoint.VirtualIPs) == 0 {
+		// Not yet allocated - nothing to restore.
+		return nil
+	}
+
+	// Restore VIPs.
+	for _, virtualIP := range peerGroup.Endpoint.VirtualIPs {
+		// Attempt to allocate the previously chosen IP.
+		if err := na.allocateVIP(virtualIP); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (na *cnmNetworkAllocator) IsPeerGroupAllocated(peerGroup *api.PeerGroup) bool {
+	// Need to allocate if there's no VIP assigned yet.
+	return peerGroup.Endpoint != nil && len(peerGroup.Endpoint.VirtualIPs) > 0
+}
+
+func (na *cnmNetworkAllocator) AllocatePeerGroup(peerGroup *api.PeerGroup) error {
+	vip := &api.Endpoint_VirtualIP{
+		NetworkID: peerGroup.Spec.Network,
+		ID:        peerGroup.ID,
+		Name:      peerGroup.Spec.Annotations.Name,
+	}
+	if err := na.allocateVIP(vip); err != nil {
+		return err
+	}
+	// Note: no port allocation port peer groups.
+	peerGroup.Endpoint = &api.Endpoint{
+		Spec:       &api.EndpointSpec{},
+		VirtualIPs: []*api.Endpoint_VirtualIP{vip},
+	}
+	return nil
+}
+
+func (na *cnmNetworkAllocator) DeallocatePeerGroup(peerGroup *api.PeerGroup) error {
+	// Note: no port allocations for peer groups.
+
+	if peerGroup.Endpoint == nil || len(peerGroup.Endpoint.VirtualIPs) == 0 {
+		return nil // Nothing was ever allocated.
+	}
+
+	for _, vip := range peerGroup.Endpoint.VirtualIPs {
+		if err := na.deallocateVIP(vip); err != nil {
+			// don't bail here, deallocate as many as possible.
+			log.L.WithError(err).
+				WithField("vip.network", vip.NetworkID).
+				WithField("vip.addr", vip.Addr).Error("error deallocating vip")
+		}
+	}
+	peerGroup.Endpoint.VirtualIPs = nil
+	return nil
+}
+
 func needsStaticNetworkAttachment(s *api.Service) bool {
 	if s.StaticInfo == nil {
 		return false // This is not a static service.
@@ -265,7 +325,7 @@ func (na *cnmNetworkAllocator) AllocateService(s *api.Service) (err error) {
 		nAttach := s.StaticInfo.NetworkAttachment
 		if localNet := na.getNetwork(nAttach.Network.ID); localNet != nil {
 			if err := na.allocateNetworkIPs(nAttach); err != nil {
-				return errors.Wrapf(err, "failed to allocate network IP for static service %s network %s", s.ID, nAttach.Network.ID)
+				return errors.Wrapf(err, "Unable to allocate network IP for static service %s network %s", s.ID, nAttach.Network.ID)
 			}
 		}
 	}
@@ -331,7 +391,11 @@ networkLoop:
 			}
 		}
 
-		vip := &api.Endpoint_VirtualIP{NetworkID: nAttach.Target}
+		vip := &api.Endpoint_VirtualIP{
+			NetworkID: nAttach.Target,
+			ID:        s.ID,
+			Name:      s.Spec.Annotations.Name,
+		}
 		if err = na.allocateVIP(vip); err != nil {
 			return err
 		}

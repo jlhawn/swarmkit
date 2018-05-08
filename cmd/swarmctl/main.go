@@ -7,6 +7,7 @@ import (
 	"github.com/docker/swarmkit/cmd/swarmctl/config"
 	"github.com/docker/swarmkit/cmd/swarmctl/network"
 	"github.com/docker/swarmkit/cmd/swarmctl/node"
+	"github.com/docker/swarmkit/cmd/swarmctl/peergroup"
 	"github.com/docker/swarmkit/cmd/swarmctl/secret"
 	"github.com/docker/swarmkit/cmd/swarmctl/service"
 	"github.com/docker/swarmkit/cmd/swarmctl/task"
@@ -59,5 +60,6 @@ func init() {
 		cluster.Cmd,
 		secret.Cmd,
 		config.Cmd,
+		peergroup.Cmd,
 	)
 }

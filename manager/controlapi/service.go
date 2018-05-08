@@ -444,7 +444,7 @@ func (s *Server) validateNetworks(networks []*api.NetworkAttachmentConfig) error
 	return nil
 }
 
-func validateMode(s *api.ServiceSpec) error {
+func validateMode(memStore *store.MemoryStore, s *api.ServiceSpec) error {
 	switch m := s.GetMode().(type) {
 	case *api.ServiceSpec_Replicated:
 		if int64(m.Replicated.Replicas) < 0 {
@@ -455,14 +455,14 @@ func validateMode(s *api.ServiceSpec) error {
 		if m.Static.PeerGroup == "" {
 			return status.Errorf(codes.InvalidArgument, "static mode: peer group must be provided")
 		}
-		if !isValidDNSName.MatchString(m.Static.PeerGroup) {
-			// if the name doesn't match the regex
-			return status.Errorf(codes.InvalidArgument, "static mode: peer group must be valid as a DNS name component")
+		var peerGroup *api.PeerGroup
+		memStore.View(func(tx store.ReadTx) {
+			peerGroup = store.GetPeerGroup(tx, m.Static.PeerGroup)
+		})
+		if peerGroup == nil {
+			return status.Errorf(codes.InvalidArgument, "static mode: peer group %s not found", m.Static.PeerGroup)
 		}
-		m.Static.PeerGroup = strings.ToLower(m.Static.PeerGroup) // Normalize to be lower-case.
-		if m.Static.PeerNetwork == "" {
-			return status.Error(codes.InvalidArgument, "static mode: peer network must be provided")
-		}
+
 		// Validate static node placement.
 		if err := validatePlacement(m.Static.Placement); err != nil {
 			return status.Errorf(codes.InvalidArgument, "static mode: placement: %s", err)
@@ -471,9 +471,7 @@ func validateMode(s *api.ServiceSpec) error {
 			return status.Error(codes.InvalidArgument, "static mode: task spec placement config must be nil")
 		}
 
-		// Validate that the peer network is an ID in the task spec network
-		// attachments config.
-		return validatePeerNetwork(s.Task.Networks, m.Static.PeerNetwork)
+		return validatePeerNetwork(s.Task.Networks, peerGroup.Spec.Network)
 	default:
 		return status.Errorf(codes.InvalidArgument, "Unrecognized service mode")
 	}
@@ -481,16 +479,19 @@ func validateMode(s *api.ServiceSpec) error {
 	return nil
 }
 
+// validatePeerNetwork checks that the peer network is NOT in the task spec
+// network attachments config. Any user-provided config options there may
+// conflict with the pre-assigned static IP. It will be added implicitly.
 func validatePeerNetwork(networks []*api.NetworkAttachmentConfig, peerNetworkID string) error {
 	for _, network := range networks {
 		if network.Target == peerNetworkID {
-			return nil
+			return status.Error(codes.InvalidArgument, "static mode: peer network must not be included in task spec network attachment configs")
 		}
 	}
-	return status.Error(codes.InvalidArgument, "static mode: peer network must be included in task spec network attachment configs")
+	return nil
 }
 
-func validateServiceSpec(spec *api.ServiceSpec) error {
+func validateServiceSpec(memStore *store.MemoryStore, spec *api.ServiceSpec) error {
 	if spec == nil {
 		return status.Errorf(codes.InvalidArgument, errInvalidArgument.Error())
 	}
@@ -506,7 +507,7 @@ func validateServiceSpec(spec *api.ServiceSpec) error {
 	if err := validateEndpointSpec(spec.Endpoint); err != nil {
 		return err
 	}
-	return validateMode(spec)
+	return validateMode(memStore, spec)
 }
 
 // checkPortConflicts does a best effort to find if the passed in spec has port
@@ -672,7 +673,7 @@ func (s *Server) checkConfigExistence(tx store.Tx, spec api.TaskSpec) error {
 // - Returns `AlreadyExists` if the ServiceID conflicts.
 // - Returns an error if the creation fails.
 func (s *Server) CreateService(ctx context.Context, request *api.CreateServiceRequest) (*api.CreateServiceResponse, error) {
-	if err := validateServiceSpec(request.Spec); err != nil {
+	if err := validateServiceSpec(s.store, request.Spec); err != nil {
 		return nil, err
 	}
 
@@ -761,7 +762,7 @@ func (s *Server) UpdateService(ctx context.Context, request *api.UpdateServiceRe
 	if request.ServiceID == "" || request.ServiceVersion == nil {
 		return nil, status.Errorf(codes.InvalidArgument, errInvalidArgument.Error())
 	}
-	if err := validateServiceSpec(request.Spec); err != nil {
+	if err := validateServiceSpec(s.store, request.Spec); err != nil {
 		return nil, err
 	}
 

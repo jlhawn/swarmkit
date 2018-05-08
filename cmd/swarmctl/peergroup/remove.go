@@ -1,4 +1,4 @@
-package task
+package peergroup
 
 import (
 	"errors"
@@ -11,12 +11,12 @@ import (
 
 var (
 	removeCmd = &cobra.Command{
-		Use:     "remove <task ID>",
-		Short:   "Remove a task",
+		Use:     "remove <peer group ID>",
+		Short:   "Remove a peer group",
 		Aliases: []string{"rm"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return errors.New("task ID missing")
+				return errors.New("peer group ID missing")
 			}
 
 			if len(args) > 1 {
@@ -29,12 +29,12 @@ var (
 			}
 
 			resolver := common.NewResolver(cmd, c)
-			task, err := resolver.LookupTask(args[0])
+			peerGroup, err := resolver.LookupPeerGroup(args[0])
 			if err != nil {
 				return err
 			}
 
-			_, err = c.RemoveTask(common.Context(cmd), &api.RemoveTaskRequest{TaskID: task.ID})
+			_, err = c.RemovePeerGroup(common.Context(cmd), &api.RemovePeerGroupRequest{PeerGroupID: peerGroup.ID})
 			if err != nil {
 				return err
 			}

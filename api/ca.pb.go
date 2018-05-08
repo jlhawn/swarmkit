@@ -89,6 +89,14 @@
 		RemoveConfigResponse
 		CreateTaskRequest
 		CreateTaskResponse
+		CreatePeerGroupRequest
+		CreatePeerGroupResponse
+		GetPeerGroupRequest
+		GetPeerGroupResponse
+		RemovePeerGroupRequest
+		RemovePeerGroupResponse
+		ListPeerGroupsRequest
+		ListPeerGroupsResponse
 		SessionRequest
 		SessionMessage
 		HeartbeatRequest
@@ -117,6 +125,7 @@
 		Meta
 		Node
 		Service
+		PeerGroup
 		Endpoint
 		Task
 		NetworkAttachment
@@ -152,6 +161,7 @@
 		ReplicatedService
 		GlobalService
 		StaticService
+		PeerGroupSpec
 		TaskSpec
 		ResourceReference
 		GenericRuntimeSpec

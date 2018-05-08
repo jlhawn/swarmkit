@@ -55,8 +55,8 @@ var (
 			// Additional checks for static mode.
 			if spec.GetStatic() != nil {
 				flags := cmd.Flags()
-				if !flags.Changed("peer-group") || !flags.Changed("peer-network") {
-					return fmt.Errorf("--peer-group and --peer-network are required with --mode=static")
+				if !flags.Changed("peer-group") {
+					return fmt.Errorf("--peer-group is required with --mode=static")
 				}
 				// Transfer the placement config to the mode.
 				spec.GetStatic().Placement = spec.Task.Placement
@@ -80,7 +80,6 @@ func init() {
 	flagparser.AddTaskFlags(flags)
 	flags.String("mode", "replicated", "one of replicated, global,static")
 	flags.String("peer-group", "", "name of peer group if static mode")
-	flags.String("peer-network", "", "name of peer network if static mode")
 	flags.StringSlice("secret", nil, "add a secret from swarm")
 	flags.StringSlice("config", nil, "add a config from swarm")
 }

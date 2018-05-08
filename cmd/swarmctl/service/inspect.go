@@ -195,7 +195,7 @@ var (
 
 			res := common.NewResolver(cmd, c)
 
-			service, err := getService(common.Context(cmd), c, args[0])
+			service, err := res.LookupService(args[0])
 			if err != nil {
 				return err
 			}

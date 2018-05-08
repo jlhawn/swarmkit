@@ -59,7 +59,7 @@ type NetworkAllocator interface {
 
 	// AllocateService allocates all the network resources such as virtual
 	// IP and ports needed by the service.
-	AllocateService(s *api.Service) (err error)
+	AllocateService(s *api.Service) error
 
 	// DeallocateService de-allocates all the network resources such as
 	// virtual IP and ports associated with the service.
@@ -72,6 +72,14 @@ type NetworkAllocator interface {
 	// HostPublishPortsNeedUpdate returns true if the passed service needs
 	// allocations for its published ports in host (non ingress) mode
 	HostPublishPortsNeedUpdate(s *api.Service) bool
+
+	//
+	// Peer Group Allocation
+	//
+	RestorePeerGroup(peerGroup *api.PeerGroup) error
+	IsPeerGroupAllocated(peerGroup *api.PeerGroup) bool
+	AllocatePeerGroup(peerGroup *api.PeerGroup) error
+	DeallocatePeerGroup(peerGroup *api.PeerGroup) error
 
 	//
 	// Task Allocation

@@ -163,6 +163,8 @@ func (a *Allocator) init(ctx context.Context, aa *allocActor) (<-chan events.Eve
 		api.EventCreateNode{},
 		api.EventUpdateNode{},
 		api.EventDeleteNode{},
+		api.EventCreatePeerGroup{},
+		api.EventDeletePeerGroup{},
 		state.EventCommit{},
 	)
 

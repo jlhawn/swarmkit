@@ -29,7 +29,9 @@ var (
 				return err
 			}
 
-			service, err := getService(common.Context(cmd), c, args[0])
+			resolver := common.NewResolver(cmd, c)
+
+			service, err := resolver.LookupService(args[0])
 			if err != nil {
 				return err
 			}

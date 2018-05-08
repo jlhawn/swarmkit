@@ -8,6 +8,6 @@ WORKDIR /go/src/github.com/docker/swarmkit
 
 RUN make bin/swarmctl
 
-FROM alpine:latest
+FROM scratch
 
-COPY --from=builder /go/src/github.com/docker/swarmkit/bin /swarmkit-bin
+COPY --from=builder /go/src/github.com/docker/swarmkit/bin /bin

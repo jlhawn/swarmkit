@@ -130,6 +130,9 @@ func (a *Allocator) doNetworkInit(ctx context.Context) (err error) {
 	if err := a.restoreNodes(ctx); err != nil {
 		return err
 	}
+	if err := a.restorePeerGroups(ctx); err != nil {
+		return err
+	}
 	if err := a.restoreServices(ctx); err != nil {
 		return err
 	}
@@ -142,11 +145,12 @@ func (a *Allocator) doNetworkInit(ctx context.Context) (err error) {
 	if err := a.allocateNetworks(ctx); err != nil {
 		return err
 	}
-
 	if err := a.allocateNodes(ctx); err != nil {
 		return err
 	}
-
+	if err := a.allocatePeerGroups(ctx); err != nil {
+		return err
+	}
 	if err := a.allocateServices(ctx); err != nil {
 		return err
 	}
@@ -277,6 +281,34 @@ func (a *Allocator) doNetworkAlloc(ctx context.Context, ev events.Event) {
 		// Remove it from unallocatedServices just in case
 		// it's still there.
 		delete(nc.unallocatedServices, s.ID)
+	case api.EventCreatePeerGroup:
+		var peerGroup *api.PeerGroup
+		a.store.View(func(tx store.ReadTx) {
+			peerGroup = store.GetPeerGroup(tx, v.PeerGroup.ID)
+		})
+		if peerGroup == nil {
+			break
+		}
+
+		if nc.nwkAllocator.IsPeerGroupAllocated(peerGroup) {
+			break
+		}
+
+		if err := nc.nwkAllocator.AllocatePeerGroup(peerGroup); err != nil {
+			log.G(ctx).WithError(err).Errorf("Unable to allocate peer group %s", peerGroup.ID)
+			break
+		}
+		if err := a.store.Update(func(tx store.Tx) error {
+			return store.UpdatePeerGroup(tx, peerGroup)
+		}); err != nil {
+			log.G(ctx).WithError(err).Errorf("Unable to commit allocation for peer group %s", peerGroup.ID)
+		}
+	case api.EventDeletePeerGroup:
+		peerGroup := v.PeerGroup.Copy()
+
+		if err := nc.nwkAllocator.DeallocatePeerGroup(peerGroup); err != nil {
+			log.G(ctx).WithError(err).Errorf("Unable to deallocate deleted peer group %s", peerGroup.ID)
+		}
 	case api.EventCreateNode, api.EventUpdateNode, api.EventDeleteNode:
 		a.doNodeAlloc(ctx, ev)
 	case api.EventCreateTask, api.EventUpdateTask, api.EventDeleteTask:
@@ -649,6 +681,28 @@ func (a *Allocator) allocateNetworks(ctx context.Context) error {
 	return nil
 }
 
+func (a *Allocator) restorePeerGroups(ctx context.Context) error {
+	var (
+		nc         = a.netCtx
+		peerGroups []*api.PeerGroup
+		err        error
+	)
+	a.store.View(func(tx store.ReadTx) {
+		peerGroups, err = store.FindPeerGroups(tx, store.All)
+	})
+	if err != nil {
+		return errors.Wrap(err, "error listing all peer groups in store while trying to restore during init")
+	}
+
+	for _, peerGroup := range peerGroups {
+		if err := nc.nwkAllocator.RestorePeerGroup(peerGroup); err != nil {
+			return errors.Wrapf(err, "unable to restore peer group %s", peerGroup.ID)
+		}
+	}
+
+	return nil
+}
+
 func (a *Allocator) restoreServices(ctx context.Context) error {
 	var (
 		nc       = a.netCtx
@@ -659,12 +713,46 @@ func (a *Allocator) restoreServices(ctx context.Context) error {
 		services, err = store.FindServices(tx, store.All)
 	})
 	if err != nil {
-		return errors.Wrap(err, "error listing all services in store while trying to allocate during init")
+		return errors.Wrap(err, "error listing all services in store while trying to restore during init")
 	}
 
 	for _, s := range services {
 		if err := nc.nwkAllocator.RestoreService(s); err != nil {
 			return errors.Wrapf(err, "unable to restore service %s", s.ID)
+		}
+	}
+
+	return nil
+}
+
+// allocatePeerGroups allocates peer groups in the store so far before we
+// process watched events.
+func (a *Allocator) allocatePeerGroups(ctx context.Context) error {
+	var (
+		nc         = a.netCtx
+		peerGroups []*api.PeerGroup
+		err        error
+	)
+	a.store.View(func(tx store.ReadTx) {
+		peerGroups, err = store.FindPeerGroups(tx, store.All)
+	})
+	if err != nil {
+		return errors.Wrap(err, "error listing all peer groups in store while trying to allocate during init")
+	}
+
+	for _, peerGroup := range peerGroups {
+		if nc.nwkAllocator.IsPeerGroupAllocated(peerGroup) {
+			continue
+		}
+
+		if err := nc.nwkAllocator.AllocatePeerGroup(peerGroup); err != nil {
+			return errors.Wrapf(err, "unable to allocate peer group %s during init", peerGroup.ID)
+		}
+
+		if err := a.store.Update(func(tx store.Tx) error {
+			return store.UpdatePeerGroup(tx, peerGroup)
+		}); err != nil {
+			return errors.Wrapf(err, "unable to update store with allocated peer group %s during init", peerGroup.ID)
 		}
 	}
 
@@ -1100,17 +1188,24 @@ func (a *Allocator) allocateService(ctx context.Context, s *api.Service) error {
 	if s.StaticInfo != nil && s.StaticInfo.NetworkAttachment == nil {
 		staticConfig := s.Spec.GetStatic()
 
-		var n *api.Network
+		var peerGroup *api.PeerGroup
 		a.store.View(func(tx store.ReadTx) {
-			n = store.GetNetwork(tx, staticConfig.PeerNetwork)
+			peerGroup = store.GetPeerGroup(tx, staticConfig.PeerGroup)
 		})
-		if n == nil {
-			return fmt.Errorf("failed to retrieve network %s while allocating static service %s", staticConfig.PeerNetwork, s.ID)
+		if peerGroup == nil {
+			return fmt.Errorf("failed to retrieve peer group %s while allocating static service %s", staticConfig.PeerGroup, s.ID)
+		}
+
+		var network *api.Network
+		a.store.View(func(tx store.ReadTx) {
+			network = store.GetNetwork(tx, peerGroup.Spec.Network)
+		})
+		if network == nil {
+			return fmt.Errorf("failed to retrieve network %s while allocating static service %s", peerGroup.Spec.Network, s.ID)
 		}
 
 		s.StaticInfo.NetworkAttachment = &api.NetworkAttachment{
-			Network: n,
-			Aliases: []string{staticConfig.PeerGroup},
+			Network: network,
 		}
 		s.StaticInfo.Message = "allocated static network address"
 	}
@@ -1141,7 +1236,11 @@ func (a *Allocator) allocateService(ctx context.Context, s *api.Service) error {
 
 			if !found {
 				s.Endpoint.VirtualIPs = append(s.Endpoint.VirtualIPs,
-					&api.Endpoint_VirtualIP{NetworkID: nc.ingressNetwork.ID})
+					&api.Endpoint_VirtualIP{
+						NetworkID: nc.ingressNetwork.ID,
+						ID:        s.ID,
+						Name:      s.Spec.Annotations.Name,
+					})
 			}
 		}
 	} else if s.Endpoint != nil {
@@ -1310,12 +1409,16 @@ func injectStaticServiceAttachment(ctx context.Context, tx store.ReadTx, t *api.
 		return
 	}
 
-	s := store.GetService(tx, t.ServiceID)
-	if s == nil || s.StaticInfo == nil || s.StaticInfo.NetworkAttachment == nil {
+	service := store.GetService(tx, t.ServiceID)
+	if service == nil || service.StaticInfo == nil || service.StaticInfo.NetworkAttachment == nil {
 		return // Either doesn't exist, not static, or not allocated yet.
 	}
+	peerGroup := store.GetPeerGroup(tx, service.Spec.GetStatic().PeerGroup)
+	if peerGroup == nil || peerGroup.Endpoint == nil {
+		return // Does not exist or not allocated yet.
+	}
 
-	staticAttachment := s.StaticInfo.NetworkAttachment
+	staticAttachment := service.StaticInfo.NetworkAttachment
 
 	attachments := []*api.NetworkAttachment{staticAttachment}
 	for _, nAttach := range t.Networks {
@@ -1324,6 +1427,7 @@ func injectStaticServiceAttachment(ctx context.Context, tx store.ReadTx, t *api.
 		}
 	}
 	t.Networks = attachments
+	t.Endpoint.VirtualIPs = append(t.Endpoint.VirtualIPs, peerGroup.Endpoint.VirtualIPs...)
 }
 
 func (a *Allocator) commitAllocatedTask(ctx context.Context, batch *store.Batch, t *api.Task) error {

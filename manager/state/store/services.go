@@ -90,8 +90,11 @@ func init() {
 // CreateService adds a new service to the store.
 // Returns ErrExist if the ID is already taken.
 func CreateService(tx Tx, s *api.Service) error {
-	// Ensure the name is not already in use.
+	// Ensure the name is not already in use by any service or peer group.
 	if tx.lookup(tableService, indexName, strings.ToLower(s.Spec.Annotations.Name)) != nil {
+		return ErrNameConflict
+	}
+	if tx.lookup(tablePeerGroup, indexName, strings.ToLower(s.Spec.Annotations.Name)) != nil {
 		return ErrNameConflict
 	}
 
@@ -101,11 +104,14 @@ func CreateService(tx Tx, s *api.Service) error {
 // UpdateService updates an existing service in the store.
 // Returns ErrNotExist if the service doesn't exist.
 func UpdateService(tx Tx, s *api.Service) error {
-	// Ensure the name is either not in use or already used by this same Service.
+	// Ensure the name is either not in use by any peer group or service unless
+	// already used by this same Service.
 	if existing := tx.lookup(tableService, indexName, strings.ToLower(s.Spec.Annotations.Name)); existing != nil {
 		if existing.GetID() != s.ID {
 			return ErrNameConflict
 		}
+	} else if tx.lookup(tablePeerGroup, indexName, strings.ToLower(s.Spec.Annotations.Name)) != nil {
+		return ErrNameConflict
 	}
 
 	return tx.update(tableService, s)

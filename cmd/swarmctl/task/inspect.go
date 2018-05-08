@@ -110,11 +110,12 @@ var (
 				return err
 			}
 
-			t, err := c.GetTask(common.Context(cmd), &api.GetTaskRequest{TaskID: args[0]})
+			resolver := common.NewResolver(cmd, c)
+
+			task, err := resolver.LookupTask(args[0])
 			if err != nil {
 				return err
 			}
-			task := t.Task
 
 			r, err := c.ListTasks(common.Context(cmd),
 				&api.ListTasksRequest{

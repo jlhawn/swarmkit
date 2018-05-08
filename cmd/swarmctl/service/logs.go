@@ -38,7 +38,7 @@ var (
 
 			serviceIDs := []string{}
 			for _, arg := range args {
-				service, err := getService(common.Context(cmd), c, arg)
+				service, err := r.LookupService(arg)
 				if err != nil {
 					return err
 				}

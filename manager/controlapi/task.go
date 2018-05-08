@@ -186,10 +186,10 @@ func (s *Server) ListTasks(ctx context.Context, request *api.ListTasksRequest) (
 
 		tasks = filterTasks(tasks,
 			func(e *api.Task) bool {
-				return filterContains(naming.Task(e), request.Filters.Names)
+				return filterContains(e.Annotations.Name, request.Filters.Names)
 			},
 			func(e *api.Task) bool {
-				return filterContainsPrefix(naming.Task(e), request.Filters.NamePrefixes)
+				return filterContainsPrefix(e.Annotations.Name, request.Filters.NamePrefixes)
 			},
 			func(e *api.Task) bool {
 				return filterContainsPrefix(e.ID, request.Filters.IDPrefixes)

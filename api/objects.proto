@@ -129,6 +129,29 @@ message Service {
 	StaticInfo static_info = 12;
 }
 
+message PeerGroup {
+	option (docker.protobuf.plugin.store_object) = {
+		watch_selectors: {
+			id: true
+			id_prefix: true
+			name: true
+			name_prefix: true
+			custom: true
+			custom_prefix: true
+		}
+	};
+
+	string id = 1;
+
+	Meta meta = 2 [(gogoproto.nullable) = false];
+
+	PeerGroupSpec spec = 3 [(gogoproto.nullable) = false];
+
+	// Runtime state of peer group endpoint, providing the tasks in the peer
+	// group with a virtual IP
+	Endpoint endpoint = 4;
+}
+
 // Endpoint specified all the network parameters required to
 // correctly discover and load balance a service
 message Endpoint {
@@ -157,6 +180,10 @@ message Endpoint {
 		// created for this address.  More than one to
 		// accommodate for both IPv4 and IPv6
 		string addr = 2;
+		// A name and ID is used to set the DNS entry which maps to this
+		// virtual IP. If not specified, the service ID and name are used.
+		string id = 3;
+		string name = 4;
 	}
 
 	// VirtualIPs specifies the IP addresses under which this endpoint will be

@@ -5,7 +5,6 @@ import (
 
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/cmd/swarmctl/common"
-	"github.com/docker/swarmkit/cmd/swarmctl/network"
 	"github.com/spf13/cobra"
 )
 
@@ -57,29 +56,19 @@ func parseMode(cmd *cobra.Command, spec *api.ServiceSpec, c api.ControlClient) e
 		if spec.GetStatic() == nil {
 			return fmt.Errorf("--peer-group can only be specified in --mode static")
 		}
-		peerGroup, err := flags.GetString("peer-group")
+		peerGroupNameOrID, err := flags.GetString("peer-group")
 		if err != nil {
 			return err
 		}
-		spec.GetStatic().PeerGroup = peerGroup
-	}
 
-	if flags.Changed("peer-network") {
-		if spec.GetStatic() == nil {
-			return fmt.Errorf("--peer-network can only be specified in --mode static")
-		}
-		input, err := flags.GetString("peer-network")
-		if err != nil {
-			return err
-		}
-		peerNetwork, err := network.GetNetwork(common.Context(cmd), c, input)
-		if err != nil {
-			return err
-		}
-		spec.GetStatic().PeerNetwork = peerNetwork.ID
+		resolver := common.NewResolver(cmd, c)
 
-		// Add this network to the task spec if not already.
-		addNetworkAttachmentConfig(&spec.Task, peerNetwork.ID)
+		peerGroup, err := resolver.LookupPeerGroup(peerGroupNameOrID)
+		if err != nil {
+			return err
+		}
+
+		spec.GetStatic().PeerGroup = peerGroup.ID
 	}
 
 	return nil

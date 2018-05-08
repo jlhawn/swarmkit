@@ -4538,26 +4538,40 @@ file {
   message_type {
     name: "StaticService"
     field {
-      name: "PeerGroup"
+      name: "peerGroup"
       number: 1
       label: LABEL_OPTIONAL
       type: TYPE_STRING
-      json_name: "PeerGroup"
-    }
-    field {
-      name: "PeerNetwork"
-      number: 2
-      label: LABEL_OPTIONAL
-      type: TYPE_STRING
-      json_name: "PeerNetwork"
+      json_name: "peerGroup"
     }
     field {
       name: "placement"
-      number: 5
+      number: 3
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.Placement"
       json_name: "placement"
+    }
+  }
+  message_type {
+    name: "PeerGroupSpec"
+    field {
+      name: "annotations"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Annotations"
+      options {
+        65001: 0
+      }
+      json_name: "annotations"
+    }
+    field {
+      name: "network"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "network"
     }
   }
   message_type {
@@ -5823,6 +5837,58 @@ file {
     }
   }
   message_type {
+    name: "PeerGroup"
+    field {
+      name: "id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "id"
+    }
+    field {
+      name: "meta"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Meta"
+      options {
+        65001: 0
+      }
+      json_name: "meta"
+    }
+    field {
+      name: "spec"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroupSpec"
+      options {
+        65001: 0
+      }
+      json_name: "spec"
+    }
+    field {
+      name: "endpoint"
+      number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Endpoint"
+      json_name: "endpoint"
+    }
+    options {
+      70001 {
+        1 {
+          1: 1
+          2: 1
+          3: 1
+          4: 1
+          5: 1
+          6: 1
+        }
+      }
+    }
+  }
+  message_type {
     name: "Endpoint"
     field {
       name: "spec"
@@ -5866,6 +5932,20 @@ file {
         label: LABEL_OPTIONAL
         type: TYPE_STRING
         json_name: "addr"
+      }
+      field {
+        name: "id"
+        number: 3
+        label: LABEL_OPTIONAL
+        type: TYPE_STRING
+        json_name: "id"
+      }
+      field {
+        name: "name"
+        number: 4
+        label: LABEL_OPTIONAL
+        type: TYPE_STRING
+        json_name: "name"
       }
     }
   }
@@ -7701,6 +7781,136 @@ file {
       json_name: "task"
     }
   }
+  message_type {
+    name: "CreatePeerGroupRequest"
+    field {
+      name: "spec"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroupSpec"
+      json_name: "spec"
+    }
+  }
+  message_type {
+    name: "CreatePeerGroupResponse"
+    field {
+      name: "peer_group"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroup"
+      json_name: "peerGroup"
+    }
+  }
+  message_type {
+    name: "GetPeerGroupRequest"
+    field {
+      name: "peer_group_id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "peerGroupId"
+    }
+  }
+  message_type {
+    name: "GetPeerGroupResponse"
+    field {
+      name: "peer_group"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroup"
+      json_name: "peerGroup"
+    }
+  }
+  message_type {
+    name: "RemovePeerGroupRequest"
+    field {
+      name: "peer_group_id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "peerGroupId"
+    }
+  }
+  message_type {
+    name: "RemovePeerGroupResponse"
+  }
+  message_type {
+    name: "ListPeerGroupsRequest"
+    field {
+      name: "filters"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.ListPeerGroupsRequest.Filters"
+      json_name: "filters"
+    }
+    nested_type {
+      name: "Filters"
+      field {
+        name: "names"
+        number: 1
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "names"
+      }
+      field {
+        name: "id_prefixes"
+        number: 2
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "idPrefixes"
+      }
+      field {
+        name: "labels"
+        number: 3
+        label: LABEL_REPEATED
+        type: TYPE_MESSAGE
+        type_name: ".docker.swarmkit.v1.ListPeerGroupsRequest.Filters.LabelsEntry"
+        json_name: "labels"
+      }
+      field {
+        name: "name_prefixes"
+        number: 4
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "namePrefixes"
+      }
+      nested_type {
+        name: "LabelsEntry"
+        field {
+          name: "key"
+          number: 1
+          label: LABEL_OPTIONAL
+          type: TYPE_STRING
+          json_name: "key"
+        }
+        field {
+          name: "value"
+          number: 2
+          label: LABEL_OPTIONAL
+          type: TYPE_STRING
+          json_name: "value"
+        }
+        options {
+          map_entry: true
+        }
+      }
+    }
+  }
+  message_type {
+    name: "ListPeerGroupsResponse"
+    field {
+      name: "peer_groups"
+      number: 1
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroup"
+      json_name: "peerGroups"
+    }
+  }
   service {
     name: "Control"
     method {
@@ -7777,6 +7987,46 @@ file {
       name: "RemoveTask"
       input_type: ".docker.swarmkit.v1.RemoveTaskRequest"
       output_type: ".docker.swarmkit.v1.RemoveTaskResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "GetPeerGroup"
+      input_type: ".docker.swarmkit.v1.GetPeerGroupRequest"
+      output_type: ".docker.swarmkit.v1.GetPeerGroupResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "ListPeerGroups"
+      input_type: ".docker.swarmkit.v1.ListPeerGroupsRequest"
+      output_type: ".docker.swarmkit.v1.ListPeerGroupsResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "CreatePeerGroup"
+      input_type: ".docker.swarmkit.v1.CreatePeerGroupRequest"
+      output_type: ".docker.swarmkit.v1.CreatePeerGroupResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "RemovePeerGroup"
+      input_type: ".docker.swarmkit.v1.RemovePeerGroupRequest"
+      output_type: ".docker.swarmkit.v1.RemovePeerGroupResponse"
       options {
         73626345 {
           1: "swarm-manager"
@@ -9408,6 +9658,15 @@ file {
       oneof_index: 0
       json_name: "config"
     }
+    field {
+      name: "peerGroup"
+      number: 11
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroup"
+      oneof_index: 0
+      json_name: "peerGroup"
+    }
     oneof_decl {
       name: "target"
     }
@@ -9662,6 +9921,14 @@ file {
       type_name: ".docker.swarmkit.v1.Config"
       json_name: "configs"
     }
+    field {
+      name: "peerGroups"
+      number: 10
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroup"
+      json_name: "peerGroups"
+    }
   }
   message_type {
     name: "ClusterSnapshot"
@@ -9817,6 +10084,15 @@ file {
       type_name: ".docker.swarmkit.v1.Config"
       oneof_index: 0
       json_name: "config"
+    }
+    field {
+      name: "peerGroup"
+      number: 10
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.PeerGroup"
+      oneof_index: 0
+      json_name: "peerGroup"
     }
     oneof_decl {
       name: "Object"

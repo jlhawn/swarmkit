@@ -36,6 +36,19 @@ service Control {
 		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
 	};
 
+	rpc GetPeerGroup(GetPeerGroupRequest) returns (GetPeerGroupResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+	rpc ListPeerGroups(ListPeerGroupsRequest) returns (ListPeerGroupsResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+	rpc CreatePeerGroup(CreatePeerGroupRequest) returns (CreatePeerGroupResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+	rpc RemovePeerGroup(RemovePeerGroupRequest) returns (RemovePeerGroupResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+
 	rpc GetService(GetServiceRequest) returns (GetServiceResponse) {
 		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
 	};
@@ -563,4 +576,44 @@ message CreateTaskRequest {
 
 message CreateTaskResponse {
 	Task task = 1;
+}
+
+message CreatePeerGroupRequest {
+	PeerGroupSpec spec = 1;
+}
+
+message CreatePeerGroupResponse {
+	PeerGroup peer_group = 1;
+}
+
+message GetPeerGroupRequest {
+	string peer_group_id = 1;
+}
+
+message GetPeerGroupResponse {
+	PeerGroup peer_group = 1;
+}
+
+message RemovePeerGroupRequest {
+	string peer_group_id = 1;
+}
+
+message RemovePeerGroupResponse {
+}
+
+message ListPeerGroupsRequest {
+	message Filters {
+		repeated string names = 1;
+		repeated string id_prefixes = 2;
+		map<string, string> labels = 3;
+		// NamePrefixes matches all peer groups with the given prefixes
+		repeated string name_prefixes = 4;
+
+	}
+
+	Filters filters = 1;
+}
+
+message ListPeerGroupsResponse {
+	repeated PeerGroup peer_groups = 1;
 }

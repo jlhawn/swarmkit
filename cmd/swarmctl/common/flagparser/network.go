@@ -3,7 +3,6 @@ package flagparser
 import (
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/cmd/swarmctl/common"
-	"github.com/docker/swarmkit/cmd/swarmctl/network"
 	"github.com/spf13/cobra"
 )
 
@@ -17,8 +16,9 @@ func parseNetworks(cmd *cobra.Command, spec *api.TaskSpec, c api.ControlClient) 
 		return err
 	}
 
+	resolver := common.NewResolver(cmd, c)
 	for _, input := range networkInputs {
-		n, err := network.GetNetwork(common.Context(cmd), c, input)
+		n, err := resolver.LookupNetwork(input)
 		if err != nil {
 			return err
 		}
