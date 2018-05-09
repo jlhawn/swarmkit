@@ -4,10 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
+	cfcsr "github.com/cloudflare/cfssl/csr"
+	cfsigner "github.com/cloudflare/cfssl/signer"
 	"github.com/docker/swarmkit/api"
 	"github.com/docker/swarmkit/api/equality"
 	"github.com/docker/swarmkit/api/validation"
+	"github.com/docker/swarmkit/ca"
 	"github.com/docker/swarmkit/manager/drivers"
 	"github.com/docker/swarmkit/manager/state/store"
 	"github.com/sirupsen/logrus"
@@ -126,6 +130,13 @@ func (a *assignmentSet) addTaskDependencies(readTx store.ReadTx, t *api.Task) {
 		a.tasksUsingDependency[mapKey][t.ID] = struct{}{}
 	}
 
+	if container != nil && len(container.CertificateIssuances) > 0 {
+		hosts := a.getTaskCertHosts(readTx, t)
+		for _, certIssuance := range container.CertificateIssuances {
+			a.addCertIssuanceDependencies(readTx, t, certIssuance, hosts)
+		}
+	}
+
 	a.maybeAddStaticServiceDependencies(readTx, t)
 }
 
@@ -205,6 +216,196 @@ func (a *assignmentSet) maybeAddStaticServiceDependencies(readTx store.ReadTx, t
 		}
 	}
 	a.tasksUsingDependency[mapKey][t.ID] = struct{}{}
+}
+
+func (a *assignmentSet) getTaskCertHosts(readTx store.ReadTx, task *api.Task) []string {
+	if len(task.Networks) == 0 {
+		return nil // No names to give.
+	}
+
+	hostSet := make(map[string]struct{})
+
+	networkNames := make(map[string]string, len(task.Networks))
+	for _, attachment := range task.Networks {
+		network := attachment.Network
+		networkNames[network.ID] = network.Spec.Annotations.Name
+	}
+
+	for _, attachment := range task.Networks {
+		networkName := networkNames[attachment.Network.ID]
+		for _, alias := range attachment.Aliases {
+			hostSet[alias] = struct{}{}
+			hostSet[fmt.Sprintf("%s.%s", alias, networkName)] = struct{}{}
+		}
+		for _, address := range attachment.Addresses {
+			ip, _, err := net.ParseCIDR(address)
+			if err != nil {
+				a.log.WithFields(logrus.Fields{
+					"task.id": task.ID,
+				}).Errorf("unable to parse CIDR %s", err)
+			} else {
+				hostSet[ip.String()] = struct{}{}
+			}
+		}
+	}
+
+	if task.Endpoint != nil {
+		for _, virtualIP := range task.Endpoint.VirtualIPs {
+			networkName := networkNames[virtualIP.NetworkID]
+			hostSet[virtualIP.Name] = struct{}{}
+			hostSet[fmt.Sprintf("%s.%s", virtualIP.Name, networkName)] = struct{}{}
+
+			ip, _, err := net.ParseCIDR(virtualIP.Addr)
+			if err != nil {
+				a.log.WithFields(logrus.Fields{
+					"task.id": task.ID,
+				}).Errorf("unable to parse CIDR %s", err)
+			} else {
+				hostSet[ip.String()] = struct{}{}
+			}
+		}
+	}
+
+	if task.ServiceID != "" {
+		service := store.GetService(readTx, task.ServiceID)
+		if service == nil {
+			a.log.WithFields(logrus.Fields{
+				"task.id":    task.ID,
+				"service.id": task.ServiceID,
+			}).Error("service not found")
+		} else {
+			serviceName := service.Spec.Annotations.Name
+			hostSet[serviceName] = struct{}{}
+			for _, networkName := range networkNames {
+				hostSet[fmt.Sprintf("%s.%s", serviceName, networkName)] = struct{}{}
+			}
+		}
+	}
+
+	finalHosts := make([]string, 0, len(hostSet))
+	for host := range hostSet {
+		finalHosts = append(finalHosts, host)
+	}
+
+	return finalHosts
+}
+
+func (a *assignmentSet) addCertIssuanceDependencies(readTx store.ReadTx, task *api.Task, certIssuance *api.CertificateIssuance, hosts []string) {
+	certAuthority := store.GetCA(readTx, certIssuance.CertificateAuthorityID)
+	if certAuthority == nil {
+		a.log.WithFields(logrus.Fields{
+			"ca.id":   certIssuance.CertificateAuthorityID,
+			"task.id": task.ID,
+		}).Error("certificate authority not found")
+		return
+	}
+
+	rootCA, err := ca.NewRootCA(certAuthority.Cert, certAuthority.Cert, certAuthority.Key, time.Hour*24*365, nil)
+	if err != nil {
+		a.log.WithFields(logrus.Fields{
+			"ca.id":   certIssuance.CertificateAuthorityID,
+			"task.id": task.ID,
+		}).Errorf("unable to load Root CA: %s", err)
+		return
+	}
+
+	req := &cfcsr.CertificateRequest{
+		KeyRequest: cfcsr.NewBasicKeyRequest(),
+		Hosts:      hosts,
+	}
+
+	csr, key, err := cfcsr.ParseRequest(req)
+	if err != nil {
+		a.log.WithFields(logrus.Fields{
+			"ca.id":   certIssuance.CertificateAuthorityID,
+			"task.id": task.ID,
+		}).Errorf("unable to generate CSR: %s", err)
+		return
+	}
+
+	signRequest := cfsigner.SignRequest{
+		Request: string(csr),
+		Subject: &cfsigner.Subject{CN: task.ID},
+		Hosts:   hosts,
+	}
+
+	signer, err := rootCA.Signer()
+	if err != nil {
+		a.log.WithFields(logrus.Fields{
+			"ca.id":   certIssuance.CertificateAuthorityID,
+			"task.id": task.ID,
+		}).Errorf("unable to get local CA signer: %s", err)
+		return
+	}
+
+	cert, err := signer.Sign(signRequest)
+	if err != nil {
+		a.log.WithFields(logrus.Fields{
+			"ca.id":   certIssuance.CertificateAuthorityID,
+			"task.id": task.ID,
+		}).Errorf("unable to sign certificate: %s", err)
+		return
+	}
+
+	caConfigID := fmt.Sprintf("%s-%s-issue-ca", task.ID, certIssuance.CertificateAuthorityID)
+	caConfigMapKey := typeAndID{objType: api.ResourceType_CONFIG, id: caConfigID}
+	if len(a.tasksUsingDependency[caConfigMapKey]) == 0 {
+		a.tasksUsingDependency[caConfigMapKey] = make(map[string]struct{})
+		a.changes[caConfigMapKey] = &api.AssignmentChange{
+			Assignment: &api.Assignment{
+				Item: &api.Assignment_Config{
+					Config: &api.Config{
+						ID: caConfigID,
+						Spec: api.ConfigSpec{
+							Data: certAuthority.Cert,
+						},
+					},
+				},
+			},
+			Action: api.AssignmentChange_AssignmentActionUpdate,
+		}
+	}
+	a.tasksUsingDependency[caConfigMapKey][task.ID] = struct{}{}
+
+	keyConfigID := fmt.Sprintf("%s-%s-issue-key", task.ID, certIssuance.CertificateAuthorityID)
+	keyConfigMapKey := typeAndID{objType: api.ResourceType_CONFIG, id: keyConfigID}
+	if len(a.tasksUsingDependency[keyConfigMapKey]) == 0 {
+		a.tasksUsingDependency[keyConfigMapKey] = make(map[string]struct{})
+		a.changes[keyConfigMapKey] = &api.AssignmentChange{
+			Assignment: &api.Assignment{
+				Item: &api.Assignment_Config{
+					Config: &api.Config{
+						ID: keyConfigID,
+						Spec: api.ConfigSpec{
+							Data: key,
+						},
+					},
+				},
+			},
+			Action: api.AssignmentChange_AssignmentActionUpdate,
+		}
+	}
+	a.tasksUsingDependency[keyConfigMapKey][task.ID] = struct{}{}
+
+	certConfigID := fmt.Sprintf("%s-%s-issue-cert", task.ID, certIssuance.CertificateAuthorityID)
+	certConfigMapKey := typeAndID{objType: api.ResourceType_CONFIG, id: certConfigID}
+	if len(a.tasksUsingDependency[certConfigMapKey]) == 0 {
+		a.tasksUsingDependency[certConfigMapKey] = make(map[string]struct{})
+		a.changes[certConfigMapKey] = &api.AssignmentChange{
+			Assignment: &api.Assignment{
+				Item: &api.Assignment_Config{
+					Config: &api.Config{
+						ID: certConfigID,
+						Spec: api.ConfigSpec{
+							Data: cert,
+						},
+					},
+				},
+			},
+			Action: api.AssignmentChange_AssignmentActionUpdate,
+		}
+	}
+	a.tasksUsingDependency[certConfigMapKey][task.ID] = struct{}{}
 }
 
 type peerGroupConfig struct {

@@ -220,7 +220,9 @@ func (tr *TaskReaper) tick() {
 			var historicTasks []*api.Task
 
 			switch service.Spec.GetMode().(type) {
-			case *api.ServiceSpec_Replicated:
+			// Static services can be handled the same as a replicated service
+			// with a single replica.
+			case *api.ServiceSpec_Replicated, *api.ServiceSpec_Static:
 				// Clean out the slot for which we received EventCreateTask.
 				var err error
 				historicTasks, err = store.FindTasks(tx, store.BySlot(dirty.ServiceID, dirty.Slot))

@@ -177,6 +177,21 @@ service Control {
 	rpc RemoveConfig(RemoveConfigRequest) returns (RemoveConfigResponse) {
 		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
 	}
+
+	// --- Certificate Authority APIs ---
+
+	rpc GetCA(GetCARequest) returns (GetCAResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+	rpc ListCAs(ListCAsRequest) returns (ListCAsResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+	rpc CreateCA(CreateCARequest) returns (CreateCAResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
+	rpc RemoveCA(RemoveCARequest) returns (RemoveCAResponse) {
+		option (docker.protobuf.plugin.tls_authorization) = { roles: "swarm-manager" };
+	};
 }
 
 message GetNodeRequest {
@@ -325,6 +340,7 @@ message ListServicesRequest {
 		// NamePrefixes matches all objects with the given prefixes
 		repeated string name_prefixes = 4;
 		repeated string runtimes = 5;
+		repeated string peer_groups = 6;
 	}
 
 	Filters filters = 1;
@@ -616,4 +632,44 @@ message ListPeerGroupsRequest {
 
 message ListPeerGroupsResponse {
 	repeated PeerGroup peer_groups = 1;
+}
+
+message CreateCARequest {
+	CertificateAuthoritySpec spec = 1;
+}
+
+message CreateCAResponse {
+	CertificateAuthority certificate_authority = 1;
+}
+
+message GetCARequest {
+	string certificate_authority_id = 1;
+}
+
+message GetCAResponse {
+	CertificateAuthority certificate_authority = 1;
+}
+
+message RemoveCARequest {
+	string certificate_authority_id = 1;
+}
+
+message RemoveCAResponse {
+}
+
+message ListCAsRequest {
+	message Filters {
+		repeated string names = 1;
+		repeated string id_prefixes = 2;
+		map<string, string> labels = 3;
+		// NamePrefixes matches all peer groups with the given prefixes
+		repeated string name_prefixes = 4;
+
+	}
+
+	Filters filters = 1;
+}
+
+message ListCAsResponse {
+	repeated CertificateAuthority certificate_authorities = 1;
 }

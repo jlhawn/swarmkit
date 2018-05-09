@@ -21,12 +21,14 @@ func parseVolume(flags *pflag.FlagSet, spec *api.TaskSpec) error {
 		container := spec.GetContainer()
 
 		for _, volume := range volumes {
-			if strings.Contains(volume, ":") {
+			parts := strings.SplitN(volume, ":", 2)
+			if len(parts) != 2 {
 				return fmt.Errorf("volume format %q not supported", volume)
 			}
 			container.Mounts = append(container.Mounts, api.Mount{
 				Type:   api.MountTypeVolume,
-				Target: volume,
+				Source: parts[0],
+				Target: parts[1],
 			})
 		}
 	}

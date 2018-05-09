@@ -54,6 +54,10 @@ var (
 				return err
 			}
 
+			if err := flagparser.ParseAddCertIssuance(cmd, spec, "cert"); err != nil {
+				return err
+			}
+
 			r, err := c.CreateTask(common.Context(cmd), &api.CreateTaskRequest{Spec: spec, Annotations: annotations})
 			if err != nil {
 				return err
@@ -75,5 +79,6 @@ func init() {
 	flagparser.AddAnnotationsFlags(flags)
 	flags.StringSlice("secret", nil, "add a secret from swarm")
 	flags.StringSlice("config", nil, "add a config from swarm")
+	flags.StringSlice("cert", nil, "add a certificate issuance from swarm")
 	flags.BoolP("follow", "f", false, "Follow log output")
 }

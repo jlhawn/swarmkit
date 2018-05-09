@@ -338,8 +338,6 @@ func (o *Orchestrator) tickTasks(ctx context.Context) {
 
 func (o *Orchestrator) addTask(ctx context.Context, batch *store.Batch, service *api.Service, nodeID string) {
 	task := orchestrator.NewTask(o.cluster, service, 0, nodeID)
-	// Inject a materialized peer group config reference.
-	task.MaterializedConfigs = append(task.MaterializedConfigs, orchestrator.PeerGroupConfigRef(task))
 
 	err := batch.Update(func(tx store.Tx) error {
 		if store.GetService(tx, service.ID) == nil {

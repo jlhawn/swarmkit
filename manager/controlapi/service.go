@@ -284,6 +284,11 @@ func validateTaskSpec(taskSpec api.TaskSpec) error {
 		return err
 	}
 
+	// Check to see if the certificate issuance portion of the spec is valid
+	if err := validateCertIssuance(taskSpec); err != nil {
+		return err
+	}
+
 	if taskSpec.GetRuntime() == nil {
 		return status.Errorf(codes.InvalidArgument, "TaskSpec: missing runtime")
 	}
@@ -422,6 +427,54 @@ func validateConfigRefsSpec(spec api.TaskSpec) error {
 
 			existingTargets[fileName] = configRef.ConfigName
 		}
+	}
+
+	return nil
+}
+
+func validateCertIssuance(spec api.TaskSpec) error {
+	container := spec.GetContainer()
+	if container == nil {
+		return nil
+	}
+
+	// Keep a map to track all the targets that will be exposed
+	existingTargets := make(map[string]string)
+	for _, certIssuance := range container.CertificateIssuances {
+		// CA ID is mandatory, we have invalid issuances without them.
+		if certIssuance.CertificateAuthorityID == "" || certIssuance.CertificateAuthorityName == "" {
+			return status.Errorf(codes.InvalidArgument, "malformed certificate issuance")
+		}
+
+		if certIssuance.Directory == nil {
+			return status.Errorf(codes.InvalidArgument, "malformed certificate issuance, no directory provided")
+		}
+
+		// Ensure directory name uniqueness.
+		dirName := certIssuance.Directory.Name
+		// Validate the directory name.
+		if dirName == "" {
+			return status.Errorf(codes.InvalidArgument, "malformed certificate issuance, invalid target directory name provided")
+		}
+
+		// If this target is already in use, we have conflicting targets.
+		if prevCAName, ok := existingTargets[dirName]; ok {
+			return status.Errorf(codes.InvalidArgument, "certificate issuances '%s' and '%s' have a conflicting target directory: '%s'", prevCAName, certIssuance.CertificateAuthorityName, dirName)
+		}
+
+		// If the target uid or gid is blank, set it to "0".
+		if certIssuance.Directory.UID == "" {
+			certIssuance.Directory.UID = "0"
+		}
+		if certIssuance.Directory.GID == "" {
+			certIssuance.Directory.GID = "0"
+		}
+		// If mode is not set, make it read-only.
+		if certIssuance.Directory.Mode == 0 {
+			certIssuance.Directory.Mode = 0444
+		}
+
+		existingTargets[dirName] = certIssuance.CertificateAuthorityName
 	}
 
 	return nil
@@ -667,6 +720,35 @@ func (s *Server) checkConfigExistence(tx store.Tx, spec api.TaskSpec) error {
 	return nil
 }
 
+// checkCertIssuanceExistence finds if the CAs in certificate issuances exist.
+func (s *Server) checkCertIssuanceExistence(tx store.Tx, spec api.TaskSpec) error {
+	container := spec.GetContainer()
+	if container == nil {
+		return nil
+	}
+
+	var failedRefs []string
+	for _, certIssuance := range container.CertificateIssuances {
+		certAuthority := store.GetCA(tx, certIssuance.CertificateAuthorityID)
+		// Check to see if the certAuthority exists and certIssuance.CertificateAuthorityName matches the actual CA name.
+		if certAuthority == nil || certAuthority.Spec.Annotations.Name != certIssuance.CertificateAuthorityName {
+			failedRefs = append(failedRefs, certIssuance.CertificateAuthorityName)
+		}
+	}
+
+	if len(failedRefs) > 0 {
+		configStr := "certificate authorities"
+		if len(failedRefs) == 1 {
+			configStr = "certificate authority"
+		}
+
+		return status.Errorf(codes.InvalidArgument, "%s not found: %v", configStr, strings.Join(failedRefs, ", "))
+
+	}
+
+	return nil
+}
+
 // CreateService creates and returns a Service based on the provided ServiceSpec.
 // - Returns `InvalidArgument` if the ServiceSpec is malformed.
 // - Returns `Unimplemented` if the ServiceSpec references unimplemented features.
@@ -713,6 +795,10 @@ func (s *Server) CreateService(ctx context.Context, request *api.CreateServiceRe
 			return err
 		}
 		err = s.checkConfigExistence(tx, request.Spec.Task)
+		if err != nil {
+			return err
+		}
+		err = s.checkCertIssuanceExistence(tx, request.Spec.Task)
 		if err != nil {
 			return err
 		}
@@ -813,6 +899,11 @@ func (s *Server) UpdateService(ctx context.Context, request *api.UpdateServiceRe
 		}
 
 		err = s.checkConfigExistence(tx, request.Spec.Task)
+		if err != nil {
+			return err
+		}
+
+		err = s.checkCertIssuanceExistence(tx, request.Spec.Task)
 		if err != nil {
 			return err
 		}
@@ -935,6 +1026,8 @@ func (s *Server) ListServices(ctx context.Context, request *api.ListServicesRequ
 			services, err = store.FindServices(tx, buildFilters(store.ByIDPrefix, request.Filters.IDPrefixes))
 		case request.Filters != nil && len(request.Filters.Runtimes) > 0:
 			services, err = store.FindServices(tx, buildFilters(store.ByRuntime, request.Filters.Runtimes))
+		case request.Filters != nil && len(request.Filters.PeerGroups) > 0:
+			services, err = store.FindServices(tx, buildFilters(store.ByPeerGroup, request.Filters.PeerGroups))
 		default:
 			services, err = store.FindServices(tx, store.All)
 		}
@@ -966,6 +1059,15 @@ func (s *Server) ListServices(ctx context.Context, request *api.ListServicesRequ
 					return false
 				}
 				return filterContains(r, request.Filters.Runtimes)
+			},
+			func(e *api.Service) bool {
+				if len(request.Filters.PeerGroups) == 0 {
+					return true
+				}
+				if !orchestrator.IsStaticService(e) {
+					return false
+				}
+				return filterContains(e.Spec.GetStatic().PeerGroup, request.Filters.PeerGroups)
 			},
 		)
 	}

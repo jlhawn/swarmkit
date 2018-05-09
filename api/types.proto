@@ -1003,6 +1003,22 @@ message ConfigReference {
 	}
 }
 
+message CertificateIssuance {
+	// CertificateAuthorityID references the ID of the specific CA that will
+	// issue a certificate.
+	string certificate_authority_id = 1;
+	// CertificateAuthorityName references the Name of the specific CA that
+	// will issue a certificate.
+	string certificate_authority_name = 2;
+	// Directory specifies the name of the directory which contains the
+	// following files:
+	// - key.pem
+	// - cert.pem
+	// - ca.pem
+	// Each of which will have the same owner and be read-only.
+	FileTarget directory = 3;
+}
+
 // BlacklistedCertificate is a record for a blacklisted certificate. It does not
 // contain the certificate's CN, because these records are indexed by CN.
 message BlacklistedCertificate {

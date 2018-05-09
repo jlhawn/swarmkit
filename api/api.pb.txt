@@ -3847,6 +3847,31 @@ file {
     }
   }
   message_type {
+    name: "CertificateIssuance"
+    field {
+      name: "certificate_authority_id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "certificateAuthorityId"
+    }
+    field {
+      name: "certificate_authority_name"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "certificateAuthorityName"
+    }
+    field {
+      name: "directory"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.FileTarget"
+      json_name: "directory"
+    }
+  }
+  message_type {
     name: "BlacklistedCertificate"
     field {
       name: "expiry"
@@ -4575,6 +4600,20 @@ file {
     }
   }
   message_type {
+    name: "CertificateAuthoritySpec"
+    field {
+      name: "annotations"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Annotations"
+      options {
+        65001: 0
+      }
+      json_name: "annotations"
+    }
+  }
+  message_type {
     name: "TaskSpec"
     field {
       name: "attachment"
@@ -4866,6 +4905,14 @@ file {
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.ConfigReference"
       json_name: "configs"
+    }
+    field {
+      name: "certificate_issuances"
+      number: 26
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateIssuance"
+      json_name: "certificateIssuances"
     }
     field {
       name: "hosts"
@@ -5874,6 +5921,64 @@ file {
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.Endpoint"
       json_name: "endpoint"
+    }
+    options {
+      70001 {
+        1 {
+          1: 1
+          2: 1
+          3: 1
+          4: 1
+          5: 1
+          6: 1
+        }
+      }
+    }
+  }
+  message_type {
+    name: "CertificateAuthority"
+    field {
+      name: "id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "id"
+    }
+    field {
+      name: "meta"
+      number: 2
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.Meta"
+      options {
+        65001: 0
+      }
+      json_name: "meta"
+    }
+    field {
+      name: "spec"
+      number: 3
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthoritySpec"
+      options {
+        65001: 0
+      }
+      json_name: "spec"
+    }
+    field {
+      name: "key"
+      number: 4
+      label: LABEL_OPTIONAL
+      type: TYPE_BYTES
+      json_name: "key"
+    }
+    field {
+      name: "cert"
+      number: 5
+      label: LABEL_OPTIONAL
+      type: TYPE_BYTES
+      json_name: "cert"
     }
     options {
       70001 {
@@ -7073,6 +7178,13 @@ file {
         type: TYPE_STRING
         json_name: "runtimes"
       }
+      field {
+        name: "peer_groups"
+        number: 6
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "peerGroups"
+      }
       nested_type {
         name: "LabelsEntry"
         field {
@@ -7911,6 +8023,136 @@ file {
       json_name: "peerGroups"
     }
   }
+  message_type {
+    name: "CreateCARequest"
+    field {
+      name: "spec"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthoritySpec"
+      json_name: "spec"
+    }
+  }
+  message_type {
+    name: "CreateCAResponse"
+    field {
+      name: "certificate_authority"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthority"
+      json_name: "certificateAuthority"
+    }
+  }
+  message_type {
+    name: "GetCARequest"
+    field {
+      name: "certificate_authority_id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "certificateAuthorityId"
+    }
+  }
+  message_type {
+    name: "GetCAResponse"
+    field {
+      name: "certificate_authority"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthority"
+      json_name: "certificateAuthority"
+    }
+  }
+  message_type {
+    name: "RemoveCARequest"
+    field {
+      name: "certificate_authority_id"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_STRING
+      json_name: "certificateAuthorityId"
+    }
+  }
+  message_type {
+    name: "RemoveCAResponse"
+  }
+  message_type {
+    name: "ListCAsRequest"
+    field {
+      name: "filters"
+      number: 1
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.ListCAsRequest.Filters"
+      json_name: "filters"
+    }
+    nested_type {
+      name: "Filters"
+      field {
+        name: "names"
+        number: 1
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "names"
+      }
+      field {
+        name: "id_prefixes"
+        number: 2
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "idPrefixes"
+      }
+      field {
+        name: "labels"
+        number: 3
+        label: LABEL_REPEATED
+        type: TYPE_MESSAGE
+        type_name: ".docker.swarmkit.v1.ListCAsRequest.Filters.LabelsEntry"
+        json_name: "labels"
+      }
+      field {
+        name: "name_prefixes"
+        number: 4
+        label: LABEL_REPEATED
+        type: TYPE_STRING
+        json_name: "namePrefixes"
+      }
+      nested_type {
+        name: "LabelsEntry"
+        field {
+          name: "key"
+          number: 1
+          label: LABEL_OPTIONAL
+          type: TYPE_STRING
+          json_name: "key"
+        }
+        field {
+          name: "value"
+          number: 2
+          label: LABEL_OPTIONAL
+          type: TYPE_STRING
+          json_name: "value"
+        }
+        options {
+          map_entry: true
+        }
+      }
+    }
+  }
+  message_type {
+    name: "ListCAsResponse"
+    field {
+      name: "certificate_authorities"
+      number: 1
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthority"
+      json_name: "certificateAuthorities"
+    }
+  }
   service {
     name: "Control"
     method {
@@ -8247,6 +8489,46 @@ file {
       name: "RemoveConfig"
       input_type: ".docker.swarmkit.v1.RemoveConfigRequest"
       output_type: ".docker.swarmkit.v1.RemoveConfigResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "GetCA"
+      input_type: ".docker.swarmkit.v1.GetCARequest"
+      output_type: ".docker.swarmkit.v1.GetCAResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "ListCAs"
+      input_type: ".docker.swarmkit.v1.ListCAsRequest"
+      output_type: ".docker.swarmkit.v1.ListCAsResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "CreateCA"
+      input_type: ".docker.swarmkit.v1.CreateCARequest"
+      output_type: ".docker.swarmkit.v1.CreateCAResponse"
+      options {
+        73626345 {
+          1: "swarm-manager"
+        }
+      }
+    }
+    method {
+      name: "RemoveCA"
+      input_type: ".docker.swarmkit.v1.RemoveCARequest"
+      output_type: ".docker.swarmkit.v1.RemoveCAResponse"
       options {
         73626345 {
           1: "swarm-manager"
@@ -9659,13 +9941,22 @@ file {
       json_name: "config"
     }
     field {
-      name: "peerGroup"
+      name: "peer_group"
       number: 11
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.PeerGroup"
       oneof_index: 0
       json_name: "peerGroup"
+    }
+    field {
+      name: "certificate_authority"
+      number: 12
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthority"
+      oneof_index: 0
+      json_name: "certificateAuthority"
     }
     oneof_decl {
       name: "target"
@@ -9922,12 +10213,20 @@ file {
       json_name: "configs"
     }
     field {
-      name: "peerGroups"
+      name: "peer_groups"
       number: 10
       label: LABEL_REPEATED
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.PeerGroup"
       json_name: "peerGroups"
+    }
+    field {
+      name: "certificate_authorities"
+      number: 11
+      label: LABEL_REPEATED
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthority"
+      json_name: "certificateAuthorities"
     }
   }
   message_type {
@@ -10086,13 +10385,22 @@ file {
       json_name: "config"
     }
     field {
-      name: "peerGroup"
+      name: "peer_group"
       number: 10
       label: LABEL_OPTIONAL
       type: TYPE_MESSAGE
       type_name: ".docker.swarmkit.v1.PeerGroup"
       oneof_index: 0
       json_name: "peerGroup"
+    }
+    field {
+      name: "certificate_authority"
+      number: 11
+      label: LABEL_OPTIONAL
+      type: TYPE_MESSAGE
+      type_name: ".docker.swarmkit.v1.CertificateAuthority"
+      oneof_index: 0
+      json_name: "certificateAuthority"
     }
     oneof_decl {
       name: "Object"

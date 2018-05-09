@@ -152,6 +152,31 @@ message PeerGroup {
 	Endpoint endpoint = 4;
 }
 
+message CertificateAuthority {
+	option (docker.protobuf.plugin.store_object) = {
+		watch_selectors: {
+			id: true
+			id_prefix: true
+			name: true
+			name_prefix: true
+			custom: true
+			custom_prefix: true
+		}
+	};
+
+	string id = 1;
+
+	Meta meta = 2 [(gogoproto.nullable) = false];
+
+	CertificateAuthoritySpec spec = 3 [(gogoproto.nullable) = false];
+
+	// Key is the CA private key.
+	bytes key = 4;
+
+	// Cert is the root CA certificate.
+	bytes cert = 5;
+}
+
 // Endpoint specified all the network parameters required to
 // correctly discover and load balance a service
 message Endpoint {

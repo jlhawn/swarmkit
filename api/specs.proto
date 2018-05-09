@@ -126,6 +126,12 @@ message PeerGroupSpec {
 	string network = 2;
 }
 
+message CertificateAuthoritySpec {
+	// Annotations contains the name which will be used as the subject of
+	// the CA certificate.
+	Annotations annotations = 1 [(gogoproto.nullable) = false];
+}
+
 message TaskSpec {
 	oneof runtime {
 		NetworkAttachmentSpec attachment = 8;
@@ -288,6 +294,8 @@ message ContainerSpec {
 	// ConfigReference contains references to zero or more configs that
 	// will be exposed to the container.
 	repeated ConfigReference configs = 21;
+
+	repeated CertificateIssuance certificate_issuances = 26;
 
 	// Hosts allow additional entries to be specified in /etc/hosts
 	// that associates IP addresses with hostnames.

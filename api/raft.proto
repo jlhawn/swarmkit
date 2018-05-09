@@ -146,6 +146,7 @@ message StoreAction {
 		Resource resource = 8;
 		Extension extension = 9;
 		Config config = 10;
-		PeerGroup peerGroup = 11;
+		PeerGroup peer_group = 11;
+		CertificateAuthority certificate_authority = 12;
 	}
 }

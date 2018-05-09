@@ -51,6 +51,9 @@ var (
 			if err := flagparser.ParseAddConfig(cmd, &spec.Task, "config"); err != nil {
 				return err
 			}
+			if err := flagparser.ParseAddCertIssuance(cmd, &spec.Task, "cert"); err != nil {
+				return err
+			}
 
 			// Additional checks for static mode.
 			if spec.GetStatic() != nil {
@@ -82,4 +85,5 @@ func init() {
 	flags.String("peer-group", "", "name of peer group if static mode")
 	flags.StringSlice("secret", nil, "add a secret from swarm")
 	flags.StringSlice("config", nil, "add a config from swarm")
+	flags.StringSlice("cert", nil, "add a certificate issuance from swarm")
 }

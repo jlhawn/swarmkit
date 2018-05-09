@@ -97,6 +97,14 @@
 		RemovePeerGroupResponse
 		ListPeerGroupsRequest
 		ListPeerGroupsResponse
+		CreateCARequest
+		CreateCAResponse
+		GetCARequest
+		GetCAResponse
+		RemoveCARequest
+		RemoveCAResponse
+		ListCAsRequest
+		ListCAsResponse
 		SessionRequest
 		SessionMessage
 		HeartbeatRequest
@@ -126,6 +134,7 @@
 		Node
 		Service
 		PeerGroup
+		CertificateAuthority
 		Endpoint
 		Task
 		NetworkAttachment
@@ -162,6 +171,7 @@
 		GlobalService
 		StaticService
 		PeerGroupSpec
+		CertificateAuthoritySpec
 		TaskSpec
 		ResourceReference
 		GenericRuntimeSpec
@@ -222,6 +232,7 @@
 		FileTarget
 		SecretReference
 		ConfigReference
+		CertificateIssuance
 		BlacklistedCertificate
 		HealthConfig
 		MaybeEncryptedRecord

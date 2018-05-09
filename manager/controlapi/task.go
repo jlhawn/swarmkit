@@ -49,6 +49,9 @@ func (s *Server) CreateTask(ctx context.Context, request *api.CreateTaskRequest)
 		IsStandalone: true,
 	}
 
+	// Add any certificate issuance config refs.
+	task.MaterializedConfigs = append(task.MaterializedConfigs, orchestrator.GetCertificateIssuanceConfigRefs(task)...)
+
 	err := s.store.Update(func(tx store.Tx) error {
 		// Check to see if all the secrets being added exist as objects
 		// in our datastore
@@ -57,6 +60,10 @@ func (s *Server) CreateTask(ctx context.Context, request *api.CreateTaskRequest)
 			return err
 		}
 		err = s.checkConfigExistence(tx, *request.Spec)
+		if err != nil {
+			return err
+		}
+		err = s.checkCertIssuanceExistence(tx, *request.Spec)
 		if err != nil {
 			return err
 		}

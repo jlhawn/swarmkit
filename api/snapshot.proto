@@ -23,7 +23,8 @@ message StoreSnapshot {
 	repeated Resource resources = 7;
 	repeated Extension extensions = 8;
 	repeated Config configs = 9;
-	repeated PeerGroup peerGroups = 10;
+	repeated PeerGroup peer_groups = 10;
+	repeated CertificateAuthority certificate_authorities = 11;
 }
 
 // ClusterSnapshot stores cluster membership information in snapshots.

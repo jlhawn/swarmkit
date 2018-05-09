@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/docker/swarmkit/cmd/swarmctl/ca"
 	"github.com/docker/swarmkit/cmd/swarmctl/cluster"
 	"github.com/docker/swarmkit/cmd/swarmctl/config"
 	"github.com/docker/swarmkit/cmd/swarmctl/network"
@@ -61,5 +62,6 @@ func init() {
 		secret.Cmd,
 		config.Cmd,
 		peergroup.Cmd,
+		ca.Cmd,
 	)
 }

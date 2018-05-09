@@ -144,8 +144,6 @@ func (r *Supervisor) Restart(ctx context.Context, tx store.Tx, cluster *api.Clus
 		restartTask = orchestrator.NewTask(cluster, service, 0, t.NodeID)
 	} else if orchestrator.IsStaticService(service) {
 		restartTask = orchestrator.NewTask(cluster, service, 0, t.NodeID)
-		// Inject a materialized peer group config reference.
-		restartTask.MaterializedConfigs = append(restartTask.MaterializedConfigs, orchestrator.PeerGroupConfigRef(restartTask))
 	} else {
 		log.G(ctx).Error("service not supported by restart supervisor")
 		return nil

@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -24,7 +25,7 @@ func NewTask(cluster *api.Cluster, service *api.Service, slot uint64, nodeID str
 	}
 
 	taskID := identity.NewID()
-	task := api.Task{
+	task := &api.Task{
 		ID:                 taskID,
 		ServiceAnnotations: service.Spec.Annotations,
 		Spec:               service.Spec.Task,
@@ -48,7 +49,14 @@ func NewTask(cluster *api.Cluster, service *api.Service, slot uint64, nodeID str
 		task.NodeID = nodeID
 	}
 
-	return &task
+	if service != nil && service.StaticInfo != nil {
+		task.MaterializedConfigs = append(task.MaterializedConfigs, PeerGroupConfigRef(task))
+	}
+
+	// Add any certificate issuance config refs.
+	task.MaterializedConfigs = append(task.MaterializedConfigs, GetCertificateIssuanceConfigRefs(task)...)
+
+	return task
 }
 
 // PeerGroupConfigRef returns a config reference for a static service's
@@ -66,6 +74,56 @@ func PeerGroupConfigRef(task *api.Task) *api.ConfigReference {
 			},
 		},
 	}
+}
+
+// GetCertificateIssuanceConfigRefs returns a slice of config references for
+// any certificate issuances requested by a task.
+func GetCertificateIssuanceConfigRefs(task *api.Task) []*api.ConfigReference {
+	container := task.Spec.GetContainer()
+	if container == nil {
+		return nil
+	}
+
+	configRefs := make([]*api.ConfigReference, 0, 3*len(container.CertificateIssuances))
+	for _, certIssuance := range container.CertificateIssuances {
+		caConfigID := fmt.Sprintf("%s-%s-issue-ca", task.ID, certIssuance.CertificateAuthorityID)
+		caTarget := certIssuance.Directory.Copy()
+		caTarget.Name = filepath.Join(caTarget.Name, "ca.pem")
+
+		keyConfigID := fmt.Sprintf("%s-%s-issue-key", task.ID, certIssuance.CertificateAuthorityID)
+		keyTarget := certIssuance.Directory.Copy()
+		keyTarget.Name = filepath.Join(keyTarget.Name, "key.pem")
+
+		certConfigID := fmt.Sprintf("%s-%s-issue-cert", task.ID, certIssuance.CertificateAuthorityID)
+		certTarget := certIssuance.Directory.Copy()
+		certTarget.Name = filepath.Join(certTarget.Name, "cert.pem")
+
+		configRefs = append(configRefs,
+			&api.ConfigReference{
+				ConfigID:   caConfigID,
+				ConfigName: caConfigID,
+				Target: &api.ConfigReference_File{
+					File: caTarget,
+				},
+			},
+			&api.ConfigReference{
+				ConfigID:   keyConfigID,
+				ConfigName: keyConfigID,
+				Target: &api.ConfigReference_File{
+					File: keyTarget,
+				},
+			},
+			&api.ConfigReference{
+				ConfigID:   certConfigID,
+				ConfigName: certConfigID,
+				Target: &api.ConfigReference_File{
+					File: certTarget,
+				},
+			},
+		)
+	}
+
+	return configRefs
 }
 
 // RestartCondition returns the restart condition to apply to this task.

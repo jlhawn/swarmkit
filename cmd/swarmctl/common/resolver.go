@@ -195,3 +195,33 @@ func (r *Resolver) LookupTask(nameOrID string) (*api.Task, error) {
 
 	return getResp.Task, nil
 }
+
+func (r *Resolver) LookupCA(nameOrID string) (*api.CertificateAuthority, error) {
+	// GetCA to match via full ID.
+	getResp, err := r.c.GetCA(r.ctx, &api.GetCARequest{CertificateAuthorityID: nameOrID})
+	if err != nil {
+		// If any error (including NotFound), ListCAs to match via full name.
+		listResp, err := r.c.ListCAs(r.ctx,
+			&api.ListCAsRequest{
+				Filters: &api.ListCAsRequest_Filters{
+					Names: []string{nameOrID},
+				},
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(listResp.CertificateAuthorities) == 0 {
+			return nil, fmt.Errorf("certificat authority %s not found", nameOrID)
+		}
+
+		if l := len(listResp.CertificateAuthorities); l > 1 {
+			return nil, fmt.Errorf("certificat authority %s is ambiguous (%d matches found)", nameOrID, l)
+		}
+
+		return listResp.CertificateAuthorities[0], nil
+	}
+
+	return getResp.CertificateAuthority, nil
+}

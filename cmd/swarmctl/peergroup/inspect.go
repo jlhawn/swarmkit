@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func printPeerGroup(peerGroup *api.PeerGroup, resolver *common.Resolver) {
+func printPeerGroup(peerGroup *api.PeerGroup, resolver *common.Resolver, services []*api.Service) {
 	w := tabwriter.NewWriter(os.Stdout, 8, 8, 8, ' ', 0)
 	defer w.Flush()
 
@@ -33,6 +33,23 @@ func printPeerGroup(peerGroup *api.PeerGroup, resolver *common.Resolver) {
 	fmt.Fprintln(w, "Labels\t")
 	for key, value := range peerGroup.Spec.Annotations.Labels {
 		fmt.Fprintf(w, "  %s\t: %s\n", key, value)
+	}
+
+	fmt.Fprintln(w, "\nServices:\n")
+	common.PrintHeader(w, "ID", "Name", "Image")
+	for _, service := range services {
+		spec := service.Spec
+
+		var reference string
+		if spec.Task.GetContainer() != nil {
+			reference = spec.Task.GetContainer().Image
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\n",
+			service.ID,
+			spec.Annotations.Name,
+			reference,
+		)
 	}
 }
 
@@ -61,7 +78,16 @@ var (
 				return err
 			}
 
-			printPeerGroup(peerGroup, resolver)
+			resp, err := c.ListServices(common.Context(cmd), &api.ListServicesRequest{
+				Filters: &api.ListServicesRequest_Filters{
+					PeerGroups: []string{peerGroup.ID},
+				},
+			})
+			if err != nil {
+				return err
+			}
+
+			printPeerGroup(peerGroup, resolver, resp.Services)
 
 			return nil
 		},

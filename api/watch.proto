@@ -19,7 +19,8 @@ message Object {
 		Resource resource = 7;
 		Extension extension = 8;
 		Config config = 9;
-		PeerGroup peerGroup = 10;
+		PeerGroup peer_group = 10;
+		CertificateAuthority certificate_authority = 11;
 	}
 }
 
